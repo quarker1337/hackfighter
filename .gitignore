@@ -1,0 +1,12 @@
+# Godot engine cache
+.godot/editor/
+.godot/imported/
+.godot/exported/
+.godot/uid_cache.bin
+.godot/global_script_class_cache.cfg
+
+# Build output
+export/
+
+# OS
+.DS_Store

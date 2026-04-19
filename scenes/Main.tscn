@@ -1,0 +1,33 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/Stage.tscn" id="2_stage"]
+
+[node name="Main" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_main")
+
+[node name="SubViewportContainer" type="SubViewportContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = false
+
+[node name="GameViewport" type="SubViewport" parent="SubViewportContainer"]
+size = Vector2(512, 288)
+render_target_update_mode = 0
+
+[node name="GameRoot" type="Node2D" parent="SubViewportContainer/GameViewport"]
+
+[node name="Stage" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("2_stage")]
+
+[node name="Camera2D" type="Camera2D" parent="SubViewportContainer/GameViewport/GameRoot"]
+position = Vector2(411, 144)
+limit_left = 140.0
+limit_right = 682.0
