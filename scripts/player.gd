@@ -90,6 +90,12 @@ var block_type: String = ""  # "stand" or "crouch"
 # Pushback (set by Main.gd combat processing)
 var pushback_dir: float = 0.0  # 1.0 = push right, -1.0 = push left
 
+# Other player reference (set by Main.gd in _ready)
+var other_player: Player = null
+
+# Body collision minimum distance (from JS: minDist=55)
+const MIN_BODY_DIST: float = 55.0
+
 # Animation state (manual, matching JS)
 var current_anim: String = "idle"
 var anim_frame: int = 0
@@ -142,6 +148,9 @@ func _physics_process(_delta: float) -> void:
 			_set_animation("idle")
 		# Apply pending pushback during hitstun
 		_apply_pushback()
+		# Body collision during hitstun too
+		if other_player and not in_jump:
+			_clamp_to_body_dist()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		return
@@ -153,6 +162,9 @@ func _physics_process(_delta: float) -> void:
 			is_in_blockstun = false
 			_set_animation("idle")
 		_apply_pushback()
+		# Body collision during blockstun too
+		if other_player and not in_jump:
+			_clamp_to_body_dist()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		return
@@ -221,6 +233,10 @@ func _physics_process(_delta: float) -> void:
 	position.x += vel_x
 	position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
 
+	# ── Body collision: can't walk through the other fighter ──────────
+	if other_player and not in_jump:
+		_clamp_to_body_dist()
+
 	# ── Jump physics ──────────────────────────────────────────────────
 	if in_jump:
 		position.y += vel_y
@@ -286,6 +302,31 @@ func _physics_process(_delta: float) -> void:
 	sprite.flip_h = not facing_right
 
 # ── Combat methods ────────────────────────────────────────────────────
+
+## Clamp position so fighters can't overlap (only when both on ground)
+func _clamp_to_body_dist() -> void:
+	if not other_player:
+		return
+	# Only enforce when both fighters are grounded
+	var self_on_ground: bool = position.y >= ground_y
+	var other_on_ground: bool = other_player.position.y >= other_player.ground_y
+	if not (self_on_ground and other_on_ground):
+		return
+
+	var dist: float = position.x - other_player.position.x
+	# Positive dist = we're to the right, negative = we're to the left
+	if absf(dist) < MIN_BODY_DIST:
+		if dist > 0:
+			# We're to the right, push us right
+			position.x = other_player.position.x + MIN_BODY_DIST
+		elif dist < 0:
+			# We're to the left, push us left
+			position.x = other_player.position.x - MIN_BODY_DIST
+		else:
+			# Exactly overlapping (shouldn't happen), nudge based on facing
+			position.x += MIN_BODY_DIST * (1.0 if facing_right else -1.0)
+		# Re-clamp to stage bounds
+		position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
 
 ## Returns true if the attack is in its "active" frames (can hit)
 func is_attack_active() -> bool:

@@ -30,20 +30,20 @@ const HUD_BAR_Y: float = 16.0
 const HUD_P1_BAR_X: float = 40.0
 const HUD_P2_BAR_X: float = 292.0  # SCREEN_WIDTH - 40 - 180 = 292
 
-## Body collision minimum distance (from JS: minDist=55)
-const MIN_BODY_DIST: float = 55.0
-
 var debug_timer := 0.0
 
 func _ready() -> void:
 	print("Stoat Fighter 2 — Godot port initialized")
-	# Set ground_y on players
+	# Set ground_y on players and cross-reference each other
 	if p1:
 		p1.ground_y = p1.position.y
 		print("Main: p1.ground_y set to %.1f" % p1.ground_y)
 	if p2:
 		p2.ground_y = p2.position.y
 		print("Main: p2.ground_y set to %.1f" % p2.ground_y)
+	if p1 and p2:
+		p1.other_player = p2
+		p2.other_player = p1
 
 	# Configure camera
 	camera.zoom = CAMERA_ZOOM
@@ -72,10 +72,6 @@ func _process(delta: float) -> void:
 		else:
 			p1.facing_right = false
 			p2.facing_right = true
-
-	# Body collision push-apart
-	if p1 and p2:
-		_push_apart_bodies()
 
 	# Camera tracking (midpoint between fighters)
 	if p1 and p2:
@@ -138,24 +134,6 @@ func _box_overlap(a: Rect2, b: Rect2) -> bool:
 	       a.position.x + a.size.x > b.position.x and \
 	       a.position.y < b.position.y + b.size.y and \
 	       a.position.y + a.size.y > b.position.y
-
-# ── Body collision push-apart (from JS main.js) ──────────────────────
-
-func _push_apart_bodies() -> void:
-	var p1_on_ground: bool = p1.position.y >= p1.ground_y
-	var p2_on_ground: bool = p2.position.y >= p2.ground_y
-	if not (p1_on_ground and p2_on_ground):
-		return
-
-	var dist: float = absf(p1.position.x - p2.position.x)
-	if dist < MIN_BODY_DIST:
-		var overlap: float = MIN_BODY_DIST - dist
-		var dir: float = -1.0 if p1.position.x < p2.position.x else 1.0
-		p1.position.x += dir * overlap * 0.5
-		p2.position.x -= dir * overlap * 0.5
-		# Clamp both to stage bounds
-		p1.position.x = clampf(p1.position.x, p1.STAGE_LEFT, p1.STAGE_RIGHT)
-		p2.position.x = clampf(p2.position.x, p2.STAGE_LEFT, p2.STAGE_RIGHT)
 
 # ── HUD ───────────────────────────────────────────────────────────────
 
