@@ -26,6 +26,9 @@ static func build_prototype_frames() -> SpriteFrames:
 		["blocking_crouch","blocking",      ["Blocking_crouch.png"], 60.0/6.0, false],
 	]
 	
+	var total_loaded: int = 0
+	var total_failed: int = 0
+	
 	for anim_def in anims:
 		var anim_name: String = anim_def[0]
 		var sub_dir: String = anim_def[1]
@@ -42,7 +45,18 @@ static func build_prototype_frames() -> SpriteFrames:
 			var tex := load(path) as Texture2D
 			if tex:
 				frames.add_frame(anim_name, tex)
+				total_loaded += 1
 			else:
-				push_warning("SpriteLoader: failed to load %s" % path)
+				push_warning("SpriteLoader: FAILED to load %s (load returned null)" % path)
+				total_failed += 1
+	
+	print("SpriteLoader: build_prototype_frames done — %d loaded, %d failed, %d animations" % [total_loaded, total_failed, frames.get_animation_names().size()])
+	print("SpriteLoader: animation names: %s" % str(frames.get_animation_names()))
+	
+	# Check frame counts per animation
+	for anim_name in frames.get_animation_names():
+		var count = frames.get_frame_count(anim_name)
+		if count == 0:
+			print("SpriteLoader: WARNING — animation '%s' has ZERO frames!" % anim_name)
 	
 	return frames

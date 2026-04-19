@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/Stage.tscn" id="2_stage"]
+[ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="3_player"]
 
 [node name="Main" type="Control"]
 anchor_right = 1.0
@@ -17,17 +18,41 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-stretch = false
+stretch = true
+stretch_shrink = 1
 
 [node name="GameViewport" type="SubViewport" parent="SubViewportContainer"]
 size = Vector2(512, 288)
-render_target_update_mode = 0
+render_target_update_mode = 1
 
 [node name="GameRoot" type="Node2D" parent="SubViewportContainer/GameViewport"]
 
 [node name="Stage" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("2_stage")]
 
+[node name="Player1" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("3_player")]
+unique_name_in_owner = true
+player_index = 1
+facing_right = true
+position = Vector2(270, 315)
+
+[node name="Player2" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("3_player")]
+unique_name_in_owner = true
+player_index = 2
+facing_right = false
+position = Vector2(550, 315)
+
 [node name="Camera2D" type="Camera2D" parent="SubViewportContainer/GameViewport/GameRoot"]
+unique_name_in_owner = true
 position = Vector2(411, 144)
 limit_left = 140.0
 limit_right = 682.0
+
+[node name="DebugLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 500.0
+offset_bottom = 200.0
+theme_override_font_sizes/font_size = 14
+theme_override_colors/font_color = Color(0, 1, 0, 1)
