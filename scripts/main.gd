@@ -7,6 +7,7 @@ extends Control
 @onready var p2: Player = %Player2
 @onready var camera: Camera2D = %Camera2D
 @onready var debug_label: Label = %DebugLabel
+@onready var stage: Node = %Stage
 
 ## HUD nodes (created programmatically)
 var p1_health_bar: ColorRect = null
@@ -19,9 +20,13 @@ var p1_health_label: Label = null
 var p2_health_label: Label = null
 
 ## Camera config
-const CAMERA_ZOOM := Vector2(1.0, 1.0)
+const VIEW_ZOOM := 1.03
+const CAMERA_ZOOM := Vector2(VIEW_ZOOM, VIEW_ZOOM)
 const CAMERA_SMOOTHING := 8.0
 const CAMERA_Y := 144.0
+const SCREEN_WIDTH := 512.0
+const STAGE_FLOOR_WIDTH := 682.0
+const VISIBLE_WIDTH := SCREEN_WIDTH / VIEW_ZOOM
 
 ## HUD config (from JS config)
 const HUD_BAR_WIDTH: float = 180.0
@@ -75,9 +80,11 @@ func _process(delta: float) -> void:
 
 	# Camera tracking (midpoint between fighters)
 	if p1 and p2:
-		var mid_x := (p1.position.x + p2.position.x) / 2.0
-		camera.position.x = clampf(mid_x, 140.0 + 256.0, 682.0 - 256.0)
+		var cam_left := clampf((p1.position.x + p2.position.x) / 2.0 - VISIBLE_WIDTH / 2.0, 160.0, STAGE_FLOOR_WIDTH - VISIBLE_WIDTH)
+		camera.position.x = cam_left + VISIBLE_WIDTH / 2.0
 		camera.position.y = CAMERA_Y
+		if stage and stage.has_method("set_camera_left"):
+			stage.set_camera_left(cam_left)
 
 	# Update HUD
 	_update_hud()

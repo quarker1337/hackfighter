@@ -18,8 +18,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-stretch = true
-stretch_shrink = 1
+stretch = false
 
 [node name="GameViewport" type="SubViewport" parent="SubViewportContainer"]
 size = Vector2(512, 288)
@@ -28,6 +27,7 @@ render_target_update_mode = 1
 [node name="GameRoot" type="Node2D" parent="SubViewportContainer/GameViewport"]
 
 [node name="Stage" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("2_stage")]
+unique_name_in_owner = true
 
 [node name="Player1" parent="SubViewportContainer/GameViewport/GameRoot" instance=ExtResource("3_player")]
 unique_name_in_owner = true
@@ -43,7 +43,7 @@ position = Vector2(550, 315)
 
 [node name="Camera2D" type="Camera2D" parent="SubViewportContainer/GameViewport/GameRoot"]
 unique_name_in_owner = true
-position = Vector2(411, 144)
+position = Vector2(256, 144)
 limit_left = 140.0
 limit_right = 682.0
 

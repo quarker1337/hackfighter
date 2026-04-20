@@ -27,7 +27,7 @@ offset_bottom = 170.0
 
 [node name="CloudsLayer" type="ParallaxLayer" parent="ParallaxBackground"]
 motion_scale = Vector2(0, 0)
-motion_offset = Vector2(-85, 0)
+motion_offset = Vector2(0, 0)
 motion_mirroring = Vector2(682, 0)
 
 [node name="CloudSprite" type="Sprite2D" parent="ParallaxBackground/CloudsLayer"]
@@ -37,7 +37,7 @@ scale = Vector2(1.33333, 1.33333)
 
 [node name="MidBgLayer" type="ParallaxLayer" parent="ParallaxBackground"]
 motion_scale = Vector2(0, 0)
-motion_offset = Vector2(-85, 0)
+motion_offset = Vector2(0, 0)
 motion_mirroring = Vector2(0, 0)
 
 [node name="MidBgSprite" type="Sprite2D" parent="ParallaxBackground/MidBgLayer"]
@@ -47,7 +47,7 @@ scale = Vector2(1.33333, 1.33333)
 
 [node name="FloorLayer" type="ParallaxLayer" parent="ParallaxBackground"]
 motion_scale = Vector2(0, 0)
-motion_offset = Vector2(-85, 0)
+motion_offset = Vector2(0, 0)
 motion_mirroring = Vector2(0, 0)
 
 [node name="FloorSprite" type="Sprite2D" parent="ParallaxBackground/FloorLayer"]

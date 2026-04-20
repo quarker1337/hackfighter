@@ -93,9 +93,6 @@ var pushback_dir: float = 0.0  # 1.0 = push right, -1.0 = push left
 # Other player reference (set by Main.gd in _ready)
 var other_player: Player = null
 
-# Body collision minimum distance (from JS: minDist=55)
-const MIN_BODY_DIST: float = 55.0
-
 # Animation state (manual, matching JS)
 var current_anim: String = "idle"
 var anim_frame: int = 0
@@ -148,9 +145,6 @@ func _physics_process(_delta: float) -> void:
 			_set_animation("idle")
 		# Apply pending pushback during hitstun
 		_apply_pushback()
-		# Body collision during hitstun too
-		if other_player and not in_jump:
-			_clamp_to_body_dist()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		return
@@ -162,9 +156,6 @@ func _physics_process(_delta: float) -> void:
 			is_in_blockstun = false
 			_set_animation("idle")
 		_apply_pushback()
-		# Body collision during blockstun too
-		if other_player and not in_jump:
-			_clamp_to_body_dist()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		return
@@ -187,14 +178,14 @@ func _physics_process(_delta: float) -> void:
 	var wants_down := Input.is_action_pressed("p%d_down" % player_index)
 
 	# ── Check for block input (back + down = crouch block, back = stand block) ──
-	# "Back" = away from opponent. For auto-facing, we need the other player's position.
-	# We'll handle auto-facing at the END of this function. For now, block detection
-	# uses the current facing_right value + input direction.
+	# "Back" = away from opponent. Only blocks when the opponent is attacking.
+	# Otherwise holding back = walking backwards normally.
 	is_blocking = false
 	block_type = ""
 	if current_attack == "" and not in_jump:
 		var wants_back := (facing_right and wants_left) or (not facing_right and wants_right)
-		if wants_back:
+		var opponent_attacking := other_player != null and other_player.current_attack != ""
+		if wants_back and opponent_attacking:
 			is_blocking = true
 			if wants_down:
 				block_type = "crouch"
@@ -207,10 +198,9 @@ func _physics_process(_delta: float) -> void:
 		vel_y = JUMP_VEL
 		_set_animation("jump")
 		anim_frame = 0
-		_safe_play("jump")
 
-	# ── Attacks ───────────────────────────────────────────────────────
-	if current_attack == "" and not is_blocking:
+	# ── Attacks (only when standing on ground, not crouching) ──────────
+	if current_attack == "" and not is_blocking and not in_jump and not wants_down:
 		if Input.is_action_just_pressed("p%d_punch_light" % player_index):
 			_start_attack("lightPunch")
 		elif Input.is_action_just_pressed("p%d_punch_heavy" % player_index):
@@ -233,9 +223,16 @@ func _physics_process(_delta: float) -> void:
 	position.x += vel_x
 	position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
 
-	# ── Body collision: can't walk through the other fighter ──────────
-	if other_player and not in_jump:
-		_clamp_to_body_dist()
+	# ── One-way wall: can't walk through the other fighter ───────────
+	# Only stops THIS player. Never pushes the other.
+	if other_player and vel_x != 0.0 and not in_jump:
+		var dist := position.x - other_player.position.x
+		if absf(dist) < 45.0:
+			if dist > 0:
+				position.x = other_player.position.x + 45.0
+			else:
+				position.x = other_player.position.x - 45.0
+			position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
 
 	# ── Jump physics ──────────────────────────────────────────────────
 	if in_jump:
@@ -303,31 +300,6 @@ func _physics_process(_delta: float) -> void:
 
 # ── Combat methods ────────────────────────────────────────────────────
 
-## Clamp position so fighters can't overlap (only when both on ground)
-func _clamp_to_body_dist() -> void:
-	if not other_player:
-		return
-	# Only enforce when both fighters are grounded
-	var self_on_ground: bool = position.y >= ground_y
-	var other_on_ground: bool = other_player.position.y >= other_player.ground_y
-	if not (self_on_ground and other_on_ground):
-		return
-
-	var dist: float = position.x - other_player.position.x
-	# Positive dist = we're to the right, negative = we're to the left
-	if absf(dist) < MIN_BODY_DIST:
-		if dist > 0:
-			# We're to the right, push us right
-			position.x = other_player.position.x + MIN_BODY_DIST
-		elif dist < 0:
-			# We're to the left, push us left
-			position.x = other_player.position.x - MIN_BODY_DIST
-		else:
-			# Exactly overlapping (shouldn't happen), nudge based on facing
-			position.x += MIN_BODY_DIST * (1.0 if facing_right else -1.0)
-		# Re-clamp to stage bounds
-		position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
-
 ## Returns true if the attack is in its "active" frames (can hit)
 func is_attack_active() -> bool:
 	if current_attack == "":
@@ -363,14 +335,10 @@ func apply_hit(damage: int, hitstun_frames: int, pushback: float, knockdown: boo
 		knockdown_timer = KNOCKDOWN_FRAMES
 		is_in_hitstun = false
 		_set_animation("abdomen_hit")
-		_safe_play("abdomen_hit")
 	else:
 		is_in_hitstun = true
 		hitstun_timer = hitstun_frames
-		# Choose hit animation based on attack type (punch = abdomen, kick = head)
-		# This is a simplification — JS uses isPunch check
 		_set_animation("abdomen_hit")
-		_safe_play("abdomen_hit")
 
 	pending_pushback = pushback
 
@@ -388,10 +356,8 @@ func apply_block(blockstun_frames: int, pushback: float) -> void:
 	# Show blocking animation
 	if block_type == "crouch":
 		_set_animation("blocking_crouch")
-		_safe_play("blocking_crouch")
 	else:
 		_set_animation("blocking_stand")
-		_safe_play("blocking_stand")
 
 ## Apply pending pushback — called each physics frame during hitstun/blockstun
 func _apply_pushback() -> void:
@@ -415,7 +381,6 @@ func _start_attack(attack_name: String) -> void:
 		"heavyKick":  "heavykick",
 	}
 	_set_animation(anim_map[attack_name])
-	_safe_play(anim_map[attack_name])
 
 # ── Animation (manual frame advance, matching JS) ────────────────────
 
@@ -424,6 +389,7 @@ func _set_animation(anim_name: String) -> void:
 		current_anim = anim_name
 		anim_frame = 0
 		anim_timer = 0
+		_safe_play(anim_name)
 
 func _safe_play(anim_name: String) -> void:
 	# Safely play an animation — guards against crashes from missing/empty anims
