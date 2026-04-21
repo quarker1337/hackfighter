@@ -93,6 +93,14 @@ var pushback_dir: float = 0.0  # 1.0 = push right, -1.0 = push left
 # Other player reference (set by Main.gd in _ready)
 var other_player: Player = null
 
+# Optional AI override input (used for CPU-controlled P2)
+var ai_input: Dictionary = {}
+var _prev_ai_input: Dictionary = {}
+
+# Round flow / freeze state (controlled by Main)
+var control_enabled: bool = true
+var hitstop_frames: int = 0
+
 # Animation state (manual, matching JS)
 var current_anim: String = "idle"
 var anim_frame: int = 0
@@ -137,6 +145,19 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	just_landed = false
 
+	if hitstop_frames > 0:
+		hitstop_frames -= 1
+		_update_debug_overlay()
+		sprite.flip_h = not facing_right
+		_save_prev_ai_input()
+		return
+
+	if not control_enabled:
+		_update_debug_overlay()
+		sprite.flip_h = not facing_right
+		_save_prev_ai_input()
+		return
+
 	# ── Hitstun: skip all input, just count down ──────────────────────
 	if is_in_hitstun:
 		hitstun_timer -= 1
@@ -147,6 +168,7 @@ func _physics_process(_delta: float) -> void:
 		_apply_pushback()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
+		_save_prev_ai_input()
 		return
 
 	# ── Blockstun: skip all input, just count down ────────────────────
@@ -158,6 +180,7 @@ func _physics_process(_delta: float) -> void:
 		_apply_pushback()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
+		_save_prev_ai_input()
 		return
 
 	# ── Knockdown: skip all input, count down then get up ─────────────
@@ -170,12 +193,13 @@ func _physics_process(_delta: float) -> void:
 			_set_animation("idle")  # no "getting up" sprite, just go to idle
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
+		_save_prev_ai_input()
 		return
 
 	# ── Horizontal input ──────────────────────────────────────────────
-	var wants_left := Input.is_action_pressed("p%d_left" % player_index)
-	var wants_right := Input.is_action_pressed("p%d_right" % player_index)
-	var wants_down := Input.is_action_pressed("p%d_down" % player_index)
+	var wants_left := _get_input("left")
+	var wants_right := _get_input("right")
+	var wants_down := _get_input("down")
 
 	# ── Check for block input (back + down = crouch block, back = stand block) ──
 	# "Back" = away from opponent. Only blocks when the opponent is attacking.
@@ -193,7 +217,7 @@ func _physics_process(_delta: float) -> void:
 				block_type = "stand"
 
 	# ── Jump ──────────────────────────────────────────────────────────
-	if Input.is_action_just_pressed("p%d_up" % player_index) and not in_jump:
+	if _get_input_just("up") and not in_jump:
 		in_jump = true
 		vel_y = JUMP_VEL
 		_set_animation("jump")
@@ -201,13 +225,13 @@ func _physics_process(_delta: float) -> void:
 
 	# ── Attacks (only when standing on ground, not crouching) ──────────
 	if current_attack == "" and not is_blocking and not in_jump and not wants_down:
-		if Input.is_action_just_pressed("p%d_punch_light" % player_index):
+		if _get_input_just("punch_light"):
 			_start_attack("lightPunch")
-		elif Input.is_action_just_pressed("p%d_punch_heavy" % player_index):
+		elif _get_input_just("punch_heavy"):
 			_start_attack("heavyPunch")
-		elif Input.is_action_just_pressed("p%d_kick_light" % player_index):
+		elif _get_input_just("kick_light"):
 			_start_attack("lightKick")
-		elif Input.is_action_just_pressed("p%d_kick_heavy" % player_index):
+		elif _get_input_just("kick_heavy"):
 			_start_attack("heavyKick")
 
 	# ── Horizontal movement ───────────────────────────────────────────
@@ -252,6 +276,7 @@ func _physics_process(_delta: float) -> void:
 			vel_y = 0.0
 			in_jump = false
 			just_landed = true
+			SoundManager.play_landing()
 			if current_attack != "":
 				pass
 			elif wants_down:
@@ -297,6 +322,53 @@ func _physics_process(_delta: float) -> void:
 
 	_update_debug_overlay()
 	sprite.flip_h = not facing_right
+	_save_prev_ai_input()
+
+# ── Input helpers ─────────────────────────────────────────────────────
+
+func _save_prev_ai_input() -> void:
+	_prev_ai_input = ai_input.duplicate()
+
+func _get_input(action: String) -> bool:
+	if not ai_input.is_empty() and ai_input.has(action):
+		return ai_input[action]
+	return Input.is_action_pressed("p%d_%s" % [player_index, action])
+
+func _get_input_just(action: String) -> bool:
+	if not ai_input.is_empty() and ai_input.has(action):
+		var is_now: bool = ai_input[action]
+		var was_before: bool = _prev_ai_input.get(action, false)
+		return is_now and not was_before
+	return Input.is_action_just_pressed("p%d_%s" % [player_index, action])
+
+func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> void:
+	health = MAX_HEALTH
+	position = Vector2(spawn_x, spawn_y)
+	ground_y = spawn_y
+	vel_x = 0.0
+	vel_y = 0.0
+	hitstop_frames = 0
+	in_jump = false
+	just_landed = false
+	current_attack = ""
+	attack_frame = 0
+	has_hit = false
+	hitstun_timer = 0
+	blockstun_timer = 0
+	is_in_hitstun = false
+	is_in_blockstun = false
+	pending_pushback = 0.0
+	knockdown_timer = 0
+	is_knocked_down = false
+	getting_up_timer = 0
+	is_blocking = false
+	block_type = ""
+	pushback_dir = 0.0
+	control_enabled = true
+	ai_input = {}
+	_prev_ai_input = {}
+	facing_right = face_right
+	_set_animation("idle")
 
 # ── Combat methods ────────────────────────────────────────────────────
 
@@ -324,6 +396,9 @@ func get_attack_hitbox() -> Rect2:
 ## Returns the hurtbox in world coordinates
 func get_hurtbox() -> Rect2:
 	return Rect2(position.x + HURTBOX.position.x, position.y + HURTBOX.position.y, HURTBOX.size.x, HURTBOX.size.y)
+
+func apply_hitstop(frames: int) -> void:
+	hitstop_frames = maxi(hitstop_frames, frames)
 
 ## Called when this player gets hit by an attack
 func apply_hit(damage: int, hitstun_frames: int, pushback: float, knockdown: bool) -> void:
@@ -381,6 +456,7 @@ func _start_attack(attack_name: String) -> void:
 		"heavyKick":  "heavykick",
 	}
 	_set_animation(anim_map[attack_name])
+	SoundManager.play_attack_swing(attack_name)
 
 # ── Animation (manual frame advance, matching JS) ────────────────────
 
