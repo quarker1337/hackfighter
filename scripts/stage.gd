@@ -21,8 +21,10 @@ const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
 const CITY_SOURCE_VISIBLE_WIDTH: float = 768.0
 const CITY_SOURCE_MAX_PAN: float = 1024.0 - CITY_SOURCE_VISIBLE_WIDTH
-const CITY_CROP_LEFT: float = 18.0
-const CITY_CROP_RIGHT: float = 12.0
+const CITY_CROP_LEFT: float = 0.0
+const CITY_CROP_RIGHT: float = 8.0
+const CITY_PLAYER_LEFT: float = 165.0
+const CITY_PLAYER_RIGHT: float = 910.0
 
 var stage_theme: String = "city"
 var floor_width: float = LEGACY_FLOOR_WIDTH
@@ -43,6 +45,12 @@ func get_stage_width() -> float:
 
 func get_camera_left_min() -> float:
 	return camera_left_min
+
+func get_player_left_bound() -> float:
+	return 165.0 if stage_theme == "sf_easter_egg" else CITY_PLAYER_LEFT
+
+func get_player_right_bound() -> float:
+	return 657.0 if stage_theme == "sf_easter_egg" else CITY_PLAYER_RIGHT
 
 func _apply_stage_theme(theme: String) -> void:
 	if theme == "sf_easter_egg":
