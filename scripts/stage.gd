@@ -1,8 +1,10 @@
 extends Node2D
 
-## Stage scene — screen-space background layers driven manually from camera_x.
-## This matches the JS demo more closely than trying to zoom/scale fighters.
+## Stage scene — supports current real HACKFIGHTER city stage by default,
+## while preserving the legacy legacy fighter / Prototype scene as an easter egg.
 
+@onready var sky_canvas: CanvasLayer = $SkyCanvasLayer
+@onready var sky_gradient: ColorRect = $SkyCanvasLayer/SkyGradient
 @onready var parallax_bg: ParallaxBackground = $ParallaxBackground
 @onready var clouds_sprite: Sprite2D = $ParallaxBackground/CloudsLayer/CloudSprite
 @onready var mid_bg_sprite: Sprite2D = $ParallaxBackground/MidBgLayer/MidBgSprite
@@ -12,36 +14,83 @@ extends Node2D
 # Cloud drift (from JS: 0.001 px/frame at 60fps)
 const CLOUD_DRIFT_SPEED: float = 0.001
 const SCREEN_WIDTH: float = 512.0
-const FLOOR_WIDTH: float = 682.0
+const LEGACY_FLOOR_WIDTH: float = 682.0
 const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
-const MAX_SCROLL: float = FLOOR_WIDTH * VIEW_ZOOM - SCREEN_WIDTH
+const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
+const CITY_SCALE: float = 682.0 / 1024.0
 
+var stage_theme: String = "city"
+var floor_width: float = LEGACY_FLOOR_WIDTH
+var camera_left_min: float = 0.0
+var max_scroll: float = LEGACY_FLOOR_WIDTH * VIEW_ZOOM - SCREEN_WIDTH
 var camera_left: float = 0.0
 var cloud_drift_x: float = 0.0
 
 func _ready() -> void:
+	_apply_stage_theme(stage_theme)
+
+func set_stage_theme(value: String) -> void:
+	stage_theme = value
+	_apply_stage_theme(stage_theme)
+
+func get_stage_width() -> float:
+	return floor_width
+
+func get_camera_left_min() -> float:
+	return camera_left_min
+
+func _apply_stage_theme(theme: String) -> void:
+	if theme == "sf_easter_egg":
+		floor_width = LEGACY_FLOOR_WIDTH
+		camera_left_min = 160.0
+		max_scroll = floor_width * VIEW_ZOOM - SCREEN_WIDTH
+		if sky_canvas: sky_canvas.visible = true
+		if sky_gradient: sky_gradient.visible = true
+		if clouds_sprite: clouds_sprite.visible = true
+		if mid_bg_sprite: mid_bg_sprite.visible = true
+		if floor_sprite:
+			floor_sprite.texture = load("res://assets/backgrounds/prototype-stage-full.png")
+			floor_sprite.scale = Vector2(VIEW_ZOOM, VIEW_ZOOM)
+			floor_sprite.position = Vector2.ZERO
+		if mid_bg_sprite:
+			mid_bg_sprite.texture = load("res://assets/backgrounds/stage_prototype_background_1.png")
+			mid_bg_sprite.scale = Vector2(VIEW_ZOOM, VIEW_ZOOM)
+			mid_bg_sprite.position = Vector2.ZERO
+		if clouds_sprite:
+			clouds_sprite.texture = load("res://assets/backgrounds/stage_prototype_background_2.png")
+			clouds_sprite.scale = Vector2(VIEW_ZOOM, VIEW_ZOOM)
+			clouds_sprite.position = Vector2.ZERO
+		return
+
+	# Default real HACKFIGHTER city stage
+	floor_width = LEGACY_FLOOR_WIDTH
+	camera_left_min = 0.0
+	max_scroll = floor_width - SCREEN_WIDTH
+	if sky_canvas: sky_canvas.visible = false
+	if sky_gradient: sky_gradient.visible = false
+	if clouds_sprite: clouds_sprite.visible = false
+	if mid_bg_sprite: mid_bg_sprite.visible = false
 	if floor_sprite:
-		floor_sprite.scale *= VIEW_ZOOM
-	if mid_bg_sprite:
-		mid_bg_sprite.scale *= VIEW_ZOOM
-	if clouds_sprite:
-		clouds_sprite.scale *= VIEW_ZOOM
+		floor_sprite.texture = load(CITY_TEX_PATH)
+		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
+		floor_sprite.position = Vector2.ZERO
 
 func set_camera_left(value: float) -> void:
-	camera_left = clampf(value, 0.0, MAX_SCROLL)
+	camera_left = clampf(value, camera_left_min, max_scroll)
 	_update_layer_offsets()
 
 func _process(_delta: float) -> void:
-	cloud_drift_x += CLOUD_DRIFT_SPEED
-	if cloud_drift_x >= FLOOR_WIDTH:
-		cloud_drift_x -= FLOOR_WIDTH
+	if stage_theme == "sf_easter_egg":
+		cloud_drift_x += CLOUD_DRIFT_SPEED
+		if cloud_drift_x >= LEGACY_FLOOR_WIDTH:
+			cloud_drift_x -= LEGACY_FLOOR_WIDTH
 	_update_layer_offsets()
 
 func _update_layer_offsets() -> void:
 	if floor_sprite:
-		floor_sprite.position.x = BASE_OFFSET_X - camera_left
-	if mid_bg_sprite:
+		floor_sprite.position.x = (BASE_OFFSET_X if stage_theme == "sf_easter_egg" else 0.0) - camera_left
+	if mid_bg_sprite and stage_theme == "sf_easter_egg":
 		mid_bg_sprite.position.x = BASE_OFFSET_X - camera_left
-	if clouds_sprite:
+	if clouds_sprite and stage_theme == "sf_easter_egg":
 		clouds_sprite.position.x = BASE_OFFSET_X - cloud_drift_x

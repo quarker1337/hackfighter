@@ -1,8 +1,63 @@
-# sprite_loader.gd — Build SpriteFrames from individual PNG files at runtime
+# sprite_loader.gd — Build SpriteFrames from PNGs/sheets at runtime
 # Avoids .tres UID issues and keeps animation config in auditable code
-# Directory structure: res://assets/sprites/prototype/<anim_name>/<frame>.png
+# Supports the legacy Prototype easter egg and real HACKFIGHTER characters.
 
 class_name SpriteLoader
+
+static func build_character_frames(character_name: String) -> SpriteFrames:
+	match character_name.to_lower():
+		"teknium":
+			return build_teknium_frames()
+		_:
+			return build_prototype_frames()
+
+static func build_teknium_frames() -> SpriteFrames:
+	var frames := SpriteFrames.new()
+	var idle_tex := load("res://assets/real/characters/teknium/Teknium_Idle_V1-Sheet.png") as Texture2D
+	var walk_tex := load("res://assets/real/characters/teknium/Teknium_Walking_V1-Sheet.png") as Texture2D
+	if not idle_tex or not walk_tex:
+		push_warning("SpriteLoader: Teknium sheets missing, falling back to Prototype")
+		return build_prototype_frames()
+
+	_add_sheet_animation(frames, "idle", idle_tex, 8, 60.0 / 8.0, true)
+	_add_sheet_animation(frames, "walking", walk_tex, 6, 60.0 / 6.0, true)
+
+	# Placeholder mappings until the rest of Teknium's move set arrives.
+	_add_single_frame_anim_from_sheet(frames, "jump", idle_tex, 0, 8, 60.0 / 5.0)
+	_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 1, 8, 60.0 / 4.0)
+	_add_single_frame_anim_from_sheet(frames, "lightpunch", idle_tex, 2, 8, 60.0 / 4.0)
+	_add_single_frame_anim_from_sheet(frames, "heavypunch", idle_tex, 3, 8, 60.0 / 5.0)
+	_add_single_frame_anim_from_sheet(frames, "lightkick", idle_tex, 4, 8, 60.0 / 4.0)
+	_add_single_frame_anim_from_sheet(frames, "heavykick", idle_tex, 5, 8, 60.0 / 5.0)
+	_add_single_frame_anim_from_sheet(frames, "victory", idle_tex, 6, 8, 60.0 / 8.0)
+	_add_single_frame_anim_from_sheet(frames, "abdomen_hit", idle_tex, 7, 8, 60.0 / 6.0)
+	_add_single_frame_anim_from_sheet(frames, "head_hit", idle_tex, 7, 8, 60.0 / 6.0)
+	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 8, 60.0 / 6.0)
+	_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 1, 8, 60.0 / 6.0)
+	return frames
+
+static func _add_sheet_animation(frames: SpriteFrames, anim_name: String, sheet: Texture2D, frame_count: int, speed: float, loop: bool) -> void:
+	frames.add_animation(anim_name)
+	frames.set_animation_speed(anim_name, speed)
+	frames.set_animation_loop(anim_name, loop)
+	var frame_w := int(sheet.get_width() / frame_count)
+	var frame_h := int(sheet.get_height())
+	for i in range(frame_count):
+		var atlas := AtlasTexture.new()
+		atlas.atlas = sheet
+		atlas.region = Rect2(i * frame_w, 0, frame_w, frame_h)
+		frames.add_frame(anim_name, atlas)
+
+static func _add_single_frame_anim_from_sheet(frames: SpriteFrames, anim_name: String, sheet: Texture2D, frame_idx: int, frame_count: int, speed: float) -> void:
+	frames.add_animation(anim_name)
+	frames.set_animation_speed(anim_name, speed)
+	frames.set_animation_loop(anim_name, false)
+	var frame_w := int(sheet.get_width() / frame_count)
+	var frame_h := int(sheet.get_height())
+	var atlas := AtlasTexture.new()
+	atlas.atlas = sheet
+	atlas.region = Rect2(frame_idx * frame_w, 0, frame_w, frame_h)
+	frames.add_frame(anim_name, atlas)
 
 static func build_prototype_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()

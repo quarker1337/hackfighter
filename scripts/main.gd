@@ -187,7 +187,9 @@ func _process(delta: float) -> void:
 
 	# Camera tracking (midpoint between fighters)
 	if p1 and p2:
-		var cam_left := clampf((p1.position.x + p2.position.x) / 2.0 - VISIBLE_WIDTH / 2.0, 160.0, STAGE_FLOOR_WIDTH - VISIBLE_WIDTH)
+		var stage_width := stage.get_stage_width() if stage and stage.has_method("get_stage_width") else STAGE_FLOOR_WIDTH
+		var stage_left_min := stage.get_camera_left_min() if stage and stage.has_method("get_camera_left_min") else 160.0
+		var cam_left := clampf((p1.position.x + p2.position.x) / 2.0 - VISIBLE_WIDTH / 2.0, stage_left_min, stage_width - VISIBLE_WIDTH)
 		camera.position.x = cam_left + VISIBLE_WIDTH / 2.0
 		camera.position.y = CAMERA_Y
 		if stage and stage.has_method("set_camera_left"):
@@ -262,8 +264,14 @@ func _start_match() -> void:
 	menu_index = 0
 	if game_view:
 		game_view.visible = true
+	if stage and stage.has_method("set_stage_theme"):
+		stage.set_stage_theme("city")
 	_set_game_hud_visible(true)
-	# Placeholder roster shell: backend still uses current default Prototype/easter-egg build.
+	# Placeholder roster shell: backend still uses current default real build, with SF kept as easter egg.
+	if p1:
+		p1.set_character("Teknium")
+	if p2:
+		p2.set_character("Teknium")
 	if p1_name_label:
 		p1_name_label.text = selected_fighter_name
 	if p2_name_label:

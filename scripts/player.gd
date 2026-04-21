@@ -58,6 +58,7 @@ const GETTING_UP_FRAMES: int   = 20
 
 # ── Exports ───────────────────────────────────────────────────────────
 @export var player_index: int = 1
+@export var character_name: String = "Teknium"
 @export var facing_right: bool = true
 
 # ── Public state ──────────────────────────────────────────────────────
@@ -121,17 +122,7 @@ signal died
 
 func _ready() -> void:
 	health = MAX_HEALTH
-	# Build sprite frames at runtime
-	var frames := SpriteLoader.build_prototype_frames()
-	sprite.sprite_frames = frames
-	print("Player %d _ready: frames has %d anims" % [player_index, frames.get_animation_names().size()])
-	if frames.get_frame_count("idle") > 0:
-		var tex = frames.get_frame_texture("idle", 0)
-		print("Player %d _ready: idle[0] size=%s" % [player_index, str(tex.get_size()) if tex else "NULL"])
-	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
-		sprite.play("idle")
-	else:
-		push_warning("Player %d: cannot play idle animation!" % player_index)
+	_apply_character_visuals()
 	sprite.animation_finished.connect(_on_animation_finished)
 
 	# Create in-game debug overlay — child of PLAYER, not sprite
@@ -141,6 +132,23 @@ func _ready() -> void:
 	debug_overlay.add_theme_color_override("font_color", Color.YELLOW)
 	debug_overlay.z_index = 999
 	add_child(debug_overlay)
+
+func _apply_character_visuals() -> void:
+	var frames := SpriteLoader.build_character_frames(character_name)
+	sprite.sprite_frames = frames
+	if character_name.to_lower() == "teknium":
+		sprite.scale = Vector2.ONE
+	else:
+		sprite.scale = Vector2(1.33333, 1.33333)
+	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
+		sprite.play("idle")
+	else:
+		push_warning("Player %d: cannot play idle animation for '%s'!" % [player_index, character_name])
+
+func set_character(value: String) -> void:
+	character_name = value
+	if sprite:
+		_apply_character_visuals()
 
 func _physics_process(_delta: float) -> void:
 	just_landed = false
@@ -368,6 +376,7 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 	ai_input = {}
 	_prev_ai_input = {}
 	facing_right = face_right
+	_apply_character_visuals()
 	_set_animation("idle")
 
 # ── Combat methods ────────────────────────────────────────────────────
