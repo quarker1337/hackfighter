@@ -19,8 +19,8 @@ const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
-const CITY_CROP_LEFT: float = 52.0
-const CITY_CROP_RIGHT: float = 52.0
+const CITY_CROP_LEFT: float = 18.0
+const CITY_CROP_RIGHT: float = 12.0
 
 var stage_theme: String = "city"
 var floor_width: float = LEGACY_FLOOR_WIDTH
