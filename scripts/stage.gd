@@ -68,7 +68,7 @@ func _apply_stage_theme(theme: String) -> void:
 		return
 
 	# Default real HACKFIGHTER city stage
-	floor_width = LEGACY_FLOOR_WIDTH
+	floor_width = 1024.0
 	camera_left_min = CITY_CROP_LEFT
 	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH - CITY_CROP_RIGHT)
 	if sky_canvas: sky_canvas.visible = false
