@@ -137,7 +137,7 @@ func _apply_character_visuals() -> void:
 	var frames := SpriteLoader.build_character_frames(character_name)
 	sprite.sprite_frames = frames
 	if character_name.to_lower() == "teknium":
-		sprite.scale = Vector2.ONE
+		sprite.scale = Vector2(0.78, 0.78)
 	else:
 		sprite.scale = Vector2(1.33333, 1.33333)
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
