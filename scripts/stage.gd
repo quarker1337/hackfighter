@@ -19,6 +19,8 @@ const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
+const CITY_CROP_LEFT: float = 52.0
+const CITY_CROP_RIGHT: float = 52.0
 
 var stage_theme: String = "city"
 var floor_width: float = LEGACY_FLOOR_WIDTH
@@ -65,8 +67,8 @@ func _apply_stage_theme(theme: String) -> void:
 
 	# Default real HACKFIGHTER city stage
 	floor_width = LEGACY_FLOOR_WIDTH
-	camera_left_min = 0.0
-	max_scroll = floor_width - SCREEN_WIDTH
+	camera_left_min = CITY_CROP_LEFT
+	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH - CITY_CROP_RIGHT)
 	if sky_canvas: sky_canvas.visible = false
 	if sky_gradient: sky_gradient.visible = false
 	if clouds_sprite: clouds_sprite.visible = false
