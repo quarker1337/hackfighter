@@ -19,10 +19,9 @@ const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
-const CITY_SOURCE_VISIBLE_WIDTH: float = 768.0
-const CITY_SOURCE_MAX_PAN: float = 1024.0 - CITY_SOURCE_VISIBLE_WIDTH
+const CITY_DISPLAY_WIDTH: float = 1024.0 * CITY_SCALE
+const CITY_DISPLAY_MAX_SCROLL: float = CITY_DISPLAY_WIDTH - SCREEN_WIDTH
 const CITY_CROP_LEFT: float = 0.0
-const CITY_CROP_RIGHT: float = 8.0
 const CITY_PLAYER_LEFT: float = 165.0
 const CITY_PLAYER_RIGHT: float = 910.0
 
@@ -85,15 +84,14 @@ func _apply_stage_theme(theme: String) -> void:
 	# Default real HACKFIGHTER city stage
 	floor_width = 1024.0
 	camera_left_min = CITY_CROP_LEFT
-	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH - CITY_CROP_RIGHT)
+	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH)
 	if sky_canvas: sky_canvas.visible = false
 	if sky_gradient: sky_gradient.visible = false
 	if clouds_sprite: clouds_sprite.visible = false
 	if mid_bg_sprite: mid_bg_sprite.visible = false
 	if floor_sprite:
 		floor_sprite.texture = load(CITY_TEX_PATH)
-		floor_sprite.region_enabled = true
-		floor_sprite.region_rect = Rect2(0, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
+		floor_sprite.region_enabled = false
 		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
 		floor_sprite.position = Vector2.ZERO
 
@@ -113,12 +111,17 @@ func _update_layer_offsets() -> void:
 		if stage_theme == "sf_easter_egg":
 			floor_sprite.position.x = BASE_OFFSET_X - camera_left
 		else:
-			var city_pan := 0.0
+			var visual_scroll := 0.0
 			if max_scroll > camera_left_min:
-				city_pan = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_SOURCE_MAX_PAN
-			floor_sprite.region_rect = Rect2(city_pan, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
-			floor_sprite.position.x = 0.0
+				visual_scroll = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_DISPLAY_MAX_SCROLL
+			floor_sprite.position.x = -visual_scroll
 	if mid_bg_sprite and stage_theme == "sf_easter_egg":
 		mid_bg_sprite.position.x = BASE_OFFSET_X - camera_left
 	if clouds_sprite and stage_theme == "sf_easter_egg":
 		clouds_sprite.position.x = BASE_OFFSET_X - cloud_drift_x
+
+func get_camera_left() -> float:
+	return camera_left
+
+func get_max_scroll() -> float:
+	return max_scroll

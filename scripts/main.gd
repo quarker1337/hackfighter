@@ -6,7 +6,7 @@ extends Control
 @onready var p1: Player = %Player1
 @onready var p2: Player = %Player2
 @onready var camera: Camera2D = %Camera2D
-@onready var debug_label: Label = %DebugLabel
+@onready var debug_label: Label = $DebugLabel
 @onready var stage: Node = %Stage
 @onready var game_view: SubViewportContainer = $SubViewportContainer
 
@@ -187,8 +187,8 @@ func _process(delta: float) -> void:
 
 	# Camera tracking (midpoint between fighters)
 	if p1 and p2:
-		var stage_width := stage.get_stage_width() if stage and stage.has_method("get_stage_width") else STAGE_FLOOR_WIDTH
-		var stage_left_min := stage.get_camera_left_min() if stage and stage.has_method("get_camera_left_min") else 160.0
+		var stage_width: float = stage.get_stage_width() if stage and stage.has_method("get_stage_width") else STAGE_FLOOR_WIDTH
+		var stage_left_min: float = stage.get_camera_left_min() if stage and stage.has_method("get_camera_left_min") else 160.0
 		var cam_left := clampf((p1.position.x + p2.position.x) / 2.0 - VISIBLE_WIDTH / 2.0, stage_left_min, stage_width - VISIBLE_WIDTH)
 		camera.position.x = cam_left + VISIBLE_WIDTH / 2.0
 		camera.position.y = CAMERA_Y
@@ -811,5 +811,7 @@ func _update_debug_label() -> void:
 			p2.block_type if p2.is_blocking else "-"])
 	else:
 		lines.append("P2 node=NULL")
+	if stage and stage.has_method("get_camera_left") and stage.has_method("get_max_scroll"):
+		lines.append("Cam x=%.1f left=%.1f/%.1f" % [camera.position.x, stage.get_camera_left(), stage.get_max_scroll()])
 	debug_label.visible = true
 	debug_label.text = "\n".join(lines)
