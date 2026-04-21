@@ -12,9 +12,9 @@ const JUMP_VEL: float     = -11.0
 const WALK_SPEED: float   = 3.0
 const MAX_HEALTH: int     = 1000
 
-# ── Stage bounds (from JS config: STAGE_LEFT=165, STAGE_RIGHT=657) ───
-const STAGE_LEFT: int     = 165
-const STAGE_RIGHT: int    = 657
+# ── Stage bounds (legacy SF defaults; overridden per-stage by Main) ───
+var stage_left_bound: float = 165.0
+var stage_right_bound: float = 657.0
 
 # ── Attack data (from JS config) ─────────────────────────────────────
 const ATTACKS: Dictionary = {
@@ -253,7 +253,7 @@ func _physics_process(_delta: float) -> void:
 
 	# ── Apply movement ────────────────────────────────────────────────
 	position.x += vel_x
-	position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+	position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── One-way wall: can't walk through the other fighter ───────────
 	# Only stops THIS player. Never pushes the other.
@@ -264,7 +264,7 @@ func _physics_process(_delta: float) -> void:
 				position.x = other_player.position.x + 45.0
 			else:
 				position.x = other_player.position.x - 45.0
-			position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+			position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── Jump physics ──────────────────────────────────────────────────
 	if in_jump:
@@ -447,7 +447,7 @@ func apply_block(blockstun_frames: int, pushback: float) -> void:
 func _apply_pushback() -> void:
 	if pending_pushback > 0.0 and pushback_dir != 0.0:
 		position.x += pending_pushback * pushback_dir
-		position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+		position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 		pending_pushback = 0.0
 		pushback_dir = 0.0
 

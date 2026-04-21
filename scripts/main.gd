@@ -543,6 +543,13 @@ func _start_next_round(first_round: bool = false) -> void:
 	if p1 and p2:
 		p1.other_player = p2
 		p2.other_player = p1
+		if stage:
+			if stage.has_method("get_player_left_bound"):
+				p1.stage_left_bound = stage.get_player_left_bound()
+				p2.stage_left_bound = stage.get_player_left_bound()
+			if stage.has_method("get_player_right_bound"):
+				p1.stage_right_bound = stage.get_player_right_bound()
+				p2.stage_right_bound = stage.get_player_right_bound()
 	if ai:
 		ai.reset()
 	if announcement_label:
