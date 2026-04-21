@@ -18,10 +18,9 @@ const LEGACY_FLOOR_WIDTH: float = 682.0
 const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
-const CITY_SCALE: float = 1.0
+const CITY_SCALE: float = 682.0 / 1024.0
 const CITY_CROP_LEFT: float = 18.0
 const CITY_CROP_RIGHT: float = 12.0
-const CITY_PLAYER_MARGIN: float = 54.0
 
 var stage_theme: String = "city"
 var floor_width: float = LEGACY_FLOOR_WIDTH
@@ -42,12 +41,6 @@ func get_stage_width() -> float:
 
 func get_camera_left_min() -> float:
 	return camera_left_min
-
-func get_player_left_bound() -> float:
-	return 165.0 if stage_theme == "sf_easter_egg" else CITY_PLAYER_MARGIN
-
-func get_player_right_bound() -> float:
-	return 657.0 if stage_theme == "sf_easter_egg" else floor_width - CITY_PLAYER_MARGIN
 
 func _apply_stage_theme(theme: String) -> void:
 	if theme == "sf_easter_egg":
@@ -73,7 +66,7 @@ func _apply_stage_theme(theme: String) -> void:
 		return
 
 	# Default real HACKFIGHTER city stage
-	floor_width = 1024.0
+	floor_width = LEGACY_FLOOR_WIDTH
 	camera_left_min = CITY_CROP_LEFT
 	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH - CITY_CROP_RIGHT)
 	if sky_canvas: sky_canvas.visible = false
