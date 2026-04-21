@@ -52,6 +52,12 @@ func get_player_left_bound() -> float:
 func get_player_right_bound() -> float:
 	return 657.0 if stage_theme == "sf_easter_egg" else CITY_PLAYER_RIGHT
 
+func get_p1_spawn_x() -> float:
+	return 270.0 if stage_theme == "sf_easter_egg" else 300.0
+
+func get_p2_spawn_x() -> float:
+	return 550.0 if stage_theme == "sf_easter_egg" else 760.0
+
 func _apply_stage_theme(theme: String) -> void:
 	if theme == "sf_easter_egg":
 		floor_width = LEGACY_FLOOR_WIDTH

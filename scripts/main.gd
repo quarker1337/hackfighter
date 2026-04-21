@@ -534,11 +534,18 @@ func _start_next_round(first_round: bool = false) -> void:
 	intro_token += 1
 	var this_intro: int = intro_token
 	round_time_left = ROUND_TIME
+	var p1_spawn_x := P1_SPAWN_X
+	var p2_spawn_x := P2_SPAWN_X
+	if stage:
+		if stage.has_method("get_p1_spawn_x"):
+			p1_spawn_x = stage.get_p1_spawn_x()
+		if stage.has_method("get_p2_spawn_x"):
+			p2_spawn_x = stage.get_p2_spawn_x()
 	if p1:
-		p1.reset_for_new_round(P1_SPAWN_X, p1.ground_y if p1.ground_y > 0 else 315.0, true)
+		p1.reset_for_new_round(p1_spawn_x, p1.ground_y if p1.ground_y > 0 else 315.0, true)
 		p1.control_enabled = false
 	if p2:
-		p2.reset_for_new_round(P2_SPAWN_X, p2.ground_y if p2.ground_y > 0 else 315.0, false)
+		p2.reset_for_new_round(p2_spawn_x, p2.ground_y if p2.ground_y > 0 else 315.0, false)
 		p2.control_enabled = false
 	if p1 and p2:
 		p1.other_player = p2
