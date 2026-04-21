@@ -19,7 +19,8 @@ const BASE_OFFSET_X: float = 90.0
 const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
-const CITY_SCREEN_MAX_PAN: float = 1024.0 * CITY_SCALE - SCREEN_WIDTH
+const CITY_SOURCE_VISIBLE_WIDTH: float = 768.0
+const CITY_SOURCE_MAX_PAN: float = 1024.0 - CITY_SOURCE_VISIBLE_WIDTH
 const CITY_CROP_LEFT: float = 0.0
 const CITY_CROP_RIGHT: float = 8.0
 const CITY_PLAYER_LEFT: float = 165.0
@@ -83,7 +84,11 @@ func _apply_stage_theme(theme: String) -> void:
 	if clouds_sprite: clouds_sprite.visible = false
 	if mid_bg_sprite: mid_bg_sprite.visible = false
 	if floor_sprite:
-		floor_sprite.texture = load(CITY_TEX_PATH)
+		var city_tex := load(CITY_TEX_PATH) as Texture2D
+		var city_atlas := AtlasTexture.new()
+		city_atlas.atlas = city_tex
+		city_atlas.region = Rect2(0, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
+		floor_sprite.texture = city_atlas
 		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
 		floor_sprite.position = Vector2.ZERO
 
@@ -105,8 +110,11 @@ func _update_layer_offsets() -> void:
 		else:
 			var city_pan := 0.0
 			if max_scroll > camera_left_min:
-				city_pan = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_SCREEN_MAX_PAN
-			floor_sprite.position.x = -city_pan
+				city_pan = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_SOURCE_MAX_PAN
+			var atlas := floor_sprite.texture as AtlasTexture
+			if atlas:
+				atlas.region = Rect2(city_pan, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
+			floor_sprite.position.x = 0.0
 	if mid_bg_sprite and stage_theme == "sf_easter_egg":
 		mid_bg_sprite.position.x = BASE_OFFSET_X - camera_left
 	if clouds_sprite and stage_theme == "sf_easter_egg":
