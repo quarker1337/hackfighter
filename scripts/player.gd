@@ -68,6 +68,8 @@ var vel_y: float = 0.0
 var ground_y: float = 0.0  # set by Main on spawn
 var just_landed: bool = false
 var in_jump: bool = false
+var stage_left_bound: float = STAGE_LEFT
+var stage_right_bound: float = STAGE_RIGHT
 
 # Attack state
 var current_attack: String = ""
@@ -253,7 +255,7 @@ func _physics_process(_delta: float) -> void:
 
 	# ── Apply movement ────────────────────────────────────────────────
 	position.x += vel_x
-	position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+	position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── One-way wall: can't walk through the other fighter ───────────
 	# Only stops THIS player. Never pushes the other.
@@ -264,7 +266,7 @@ func _physics_process(_delta: float) -> void:
 				position.x = other_player.position.x + 45.0
 			else:
 				position.x = other_player.position.x - 45.0
-			position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+			position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── Jump physics ──────────────────────────────────────────────────
 	if in_jump:
@@ -447,7 +449,7 @@ func apply_block(blockstun_frames: int, pushback: float) -> void:
 func _apply_pushback() -> void:
 	if pending_pushback > 0.0 and pushback_dir != 0.0:
 		position.x += pending_pushback * pushback_dir
-		position.x = clampf(position.x, STAGE_LEFT, STAGE_RIGHT)
+		position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 		pending_pushback = 0.0
 		pushback_dir = 0.0
 
