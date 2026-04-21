@@ -81,7 +81,7 @@ func _apply_stage_theme(theme: String) -> void:
 		city_atlas.atlas = city_tex
 		city_atlas.region = Rect2(0, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
 		floor_sprite.texture = city_atlas
-		floor_sprite.scale = Vector2.ONE
+		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
 		floor_sprite.position = Vector2.ZERO
 
 func set_camera_left(value: float) -> void:
