@@ -69,6 +69,7 @@ func _apply_stage_theme(theme: String) -> void:
 		if mid_bg_sprite: mid_bg_sprite.visible = true
 		if floor_sprite:
 			floor_sprite.texture = load("res://assets/backgrounds/prototype-stage-full.png")
+			floor_sprite.region_enabled = false
 			floor_sprite.scale = Vector2(VIEW_ZOOM, VIEW_ZOOM)
 			floor_sprite.position = Vector2.ZERO
 		if mid_bg_sprite:
@@ -90,11 +91,9 @@ func _apply_stage_theme(theme: String) -> void:
 	if clouds_sprite: clouds_sprite.visible = false
 	if mid_bg_sprite: mid_bg_sprite.visible = false
 	if floor_sprite:
-		var city_tex := load(CITY_TEX_PATH) as Texture2D
-		var city_atlas := AtlasTexture.new()
-		city_atlas.atlas = city_tex
-		city_atlas.region = Rect2(0, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
-		floor_sprite.texture = city_atlas
+		floor_sprite.texture = load(CITY_TEX_PATH)
+		floor_sprite.region_enabled = true
+		floor_sprite.region_rect = Rect2(0, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
 		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
 		floor_sprite.position = Vector2.ZERO
 
@@ -117,9 +116,7 @@ func _update_layer_offsets() -> void:
 			var city_pan := 0.0
 			if max_scroll > camera_left_min:
 				city_pan = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_SOURCE_MAX_PAN
-			var atlas := floor_sprite.texture as AtlasTexture
-			if atlas:
-				atlas.region = Rect2(city_pan, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
+			floor_sprite.region_rect = Rect2(city_pan, 0, CITY_SOURCE_VISIBLE_WIDTH, 434)
 			floor_sprite.position.x = 0.0
 	if mid_bg_sprite and stage_theme == "sf_easter_egg":
 		mid_bg_sprite.position.x = BASE_OFFSET_X - camera_left
