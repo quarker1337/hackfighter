@@ -15,6 +15,10 @@ size = Vector2(822, 10)
 [node name="Stage" type="Node2D"]
 script = ExtResource("4_script")
 
+[node name="CitySprite" type="Sprite2D" parent="."]
+visible = false
+centered = false
+
 [node name="SkyCanvasLayer" type="CanvasLayer" parent="."]
 layer = -101
 

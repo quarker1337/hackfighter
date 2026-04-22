@@ -9,6 +9,7 @@ extends Node2D
 @onready var clouds_sprite: Sprite2D = $ParallaxBackground/CloudsLayer/CloudSprite
 @onready var mid_bg_sprite: Sprite2D = $ParallaxBackground/MidBgLayer/MidBgSprite
 @onready var floor_sprite: Sprite2D = $ParallaxBackground/FloorLayer/FloorSprite
+@onready var city_sprite: Sprite2D = $CitySprite
 @onready var floor_body: StaticBody2D = $FloorBody
 
 # Cloud drift (from JS: 0.001 px/frame at 60fps)
@@ -20,10 +21,10 @@ const VIEW_ZOOM: float = 1.03
 const CITY_TEX_PATH := "res://assets/real/stages/city/City_Scene.png"
 const CITY_SCALE: float = 682.0 / 1024.0
 const CITY_DISPLAY_WIDTH: float = 1024.0 * CITY_SCALE
-const CITY_DISPLAY_MAX_SCROLL: float = CITY_DISPLAY_WIDTH - SCREEN_WIDTH
+const CITY_VISIBLE_WIDTH: float = SCREEN_WIDTH / VIEW_ZOOM
 const CITY_CROP_LEFT: float = 0.0
-const CITY_PLAYER_LEFT: float = 165.0
-const CITY_PLAYER_RIGHT: float = 910.0
+const CITY_PLAYER_LEFT: float = 115.0
+const CITY_PLAYER_RIGHT: float = 565.0
 
 var stage_theme: String = "city"
 var floor_width: float = LEGACY_FLOOR_WIDTH
@@ -52,10 +53,10 @@ func get_player_right_bound() -> float:
 	return 657.0 if stage_theme == "sf_easter_egg" else CITY_PLAYER_RIGHT
 
 func get_p1_spawn_x() -> float:
-	return 270.0 if stage_theme == "sf_easter_egg" else 300.0
+	return 270.0 if stage_theme == "sf_easter_egg" else 205.0
 
 func get_p2_spawn_x() -> float:
-	return 550.0 if stage_theme == "sf_easter_egg" else 760.0
+	return 550.0 if stage_theme == "sf_easter_egg" else 505.0
 
 func _apply_stage_theme(theme: String) -> void:
 	if theme == "sf_easter_egg":
@@ -64,6 +65,8 @@ func _apply_stage_theme(theme: String) -> void:
 		max_scroll = floor_width * VIEW_ZOOM - SCREEN_WIDTH
 		if sky_canvas: sky_canvas.visible = true
 		if sky_gradient: sky_gradient.visible = true
+		if parallax_bg: parallax_bg.visible = true
+		if city_sprite: city_sprite.visible = false
 		if clouds_sprite: clouds_sprite.visible = true
 		if mid_bg_sprite: mid_bg_sprite.visible = true
 		if floor_sprite:
@@ -81,19 +84,18 @@ func _apply_stage_theme(theme: String) -> void:
 			clouds_sprite.position = Vector2.ZERO
 		return
 
-	# Default real HACKFIGHTER city stage
-	floor_width = 1024.0
+	# Default real HACKFIGHTER city stage as a world-space backdrop.
+	floor_width = CITY_DISPLAY_WIDTH
 	camera_left_min = CITY_CROP_LEFT
-	max_scroll = maxf(camera_left_min, floor_width - SCREEN_WIDTH)
+	max_scroll = maxf(camera_left_min, floor_width - CITY_VISIBLE_WIDTH)
 	if sky_canvas: sky_canvas.visible = false
 	if sky_gradient: sky_gradient.visible = false
-	if clouds_sprite: clouds_sprite.visible = false
-	if mid_bg_sprite: mid_bg_sprite.visible = false
-	if floor_sprite:
-		floor_sprite.texture = load(CITY_TEX_PATH)
-		floor_sprite.region_enabled = false
-		floor_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
-		floor_sprite.position = Vector2.ZERO
+	if parallax_bg: parallax_bg.visible = false
+	if city_sprite:
+		city_sprite.visible = true
+		city_sprite.texture = load(CITY_TEX_PATH)
+		city_sprite.scale = Vector2(CITY_SCALE, CITY_SCALE)
+		city_sprite.position = Vector2.ZERO
 
 func set_camera_left(value: float) -> void:
 	camera_left = clampf(value, camera_left_min, max_scroll)
@@ -107,17 +109,13 @@ func _process(_delta: float) -> void:
 	_update_layer_offsets()
 
 func _update_layer_offsets() -> void:
+	if stage_theme != "sf_easter_egg":
+		return
 	if floor_sprite:
-		if stage_theme == "sf_easter_egg":
-			floor_sprite.position.x = BASE_OFFSET_X - camera_left
-		else:
-			var visual_scroll := 0.0
-			if max_scroll > camera_left_min:
-				visual_scroll = ((camera_left - camera_left_min) / (max_scroll - camera_left_min)) * CITY_DISPLAY_MAX_SCROLL
-			floor_sprite.position.x = -visual_scroll
-	if mid_bg_sprite and stage_theme == "sf_easter_egg":
+		floor_sprite.position.x = BASE_OFFSET_X - camera_left
+	if mid_bg_sprite:
 		mid_bg_sprite.position.x = BASE_OFFSET_X - camera_left
-	if clouds_sprite and stage_theme == "sf_easter_egg":
+	if clouds_sprite:
 		clouds_sprite.position.x = BASE_OFFSET_X - cloud_drift_x
 
 func get_camera_left() -> float:

@@ -72,7 +72,11 @@ var p2_round_dots: Array[ColorRect] = []
 const VIEW_ZOOM := 1.03
 const CAMERA_ZOOM := Vector2(VIEW_ZOOM, VIEW_ZOOM)
 const CAMERA_SMOOTHING := 8.0
+const CAMERA_LEFT_MARGIN := 150.0
+const CAMERA_RIGHT_MARGIN := 150.0
+const CAMERA_PAN_SPEED := 6.0
 const CAMERA_Y := 144.0
+const MAX_FIGHTER_SEPARATION := 420.0
 const SCREEN_WIDTH := 512.0
 const STAGE_FLOOR_WIDTH := 682.0
 const VISIBLE_WIDTH := SCREEN_WIDTH / VIEW_ZOOM
@@ -107,7 +111,7 @@ func _ready() -> void:
 
 	# Configure camera
 	camera.zoom = CAMERA_ZOOM
-	camera.position_smoothing_enabled = true
+	camera.position_smoothing_enabled = false
 	camera.position_smoothing_speed = CAMERA_SMOOTHING
 	camera.make_current()
 
@@ -138,9 +142,9 @@ func _process(delta: float) -> void:
 
 	if round_state == RoundState.PLAYING:
 		if not intro_active:
-			# AI drives P2 only during live rounds
-			if p1 and p2 and ai:
-				p2.ai_input = ai.get_input(p2, p1)
+			# Temporary dummy CPU: P2 stands still for manual testing.
+			if p2:
+				p2.ai_input = {}
 
 			# Combat processing
 			if p1 and p2:
@@ -184,16 +188,10 @@ func _process(delta: float) -> void:
 		else:
 			p1.facing_right = false
 			p2.facing_right = true
+		_enforce_fighter_separation()
 
 	# Camera tracking (midpoint between fighters)
-	if p1 and p2:
-		var stage_width: float = stage.get_stage_width() if stage and stage.has_method("get_stage_width") else STAGE_FLOOR_WIDTH
-		var stage_left_min: float = stage.get_camera_left_min() if stage and stage.has_method("get_camera_left_min") else 160.0
-		var cam_left := clampf((p1.position.x + p2.position.x) / 2.0 - VISIBLE_WIDTH / 2.0, stage_left_min, stage_width - VISIBLE_WIDTH)
-		camera.position.x = cam_left + VISIBLE_WIDTH / 2.0
-		camera.position.y = CAMERA_Y
-		if stage and stage.has_method("set_camera_left"):
-			stage.set_camera_left(cam_left)
+	_apply_camera_tracking(false)
 
 	# Update HUD
 	_update_hud()
@@ -258,6 +256,55 @@ func _box_overlap(a: Rect2, b: Rect2) -> bool:
 	       a.position.x + a.size.x > b.position.x and \
 	       a.position.y < b.position.y + b.size.y and \
 	       a.position.y + a.size.y > b.position.y
+
+func _apply_camera_tracking(force_snap: bool = false) -> void:
+	if not (p1 and p2 and camera):
+		return
+	var stage_width: float = stage.get_stage_width() if stage and stage.has_method("get_stage_width") else STAGE_FLOOR_WIDTH
+	var stage_left_min: float = stage.get_camera_left_min() if stage and stage.has_method("get_camera_left_min") else 160.0
+	var max_left: float = stage.get_max_scroll() if stage and stage.has_method("get_max_scroll") else stage_width - VISIBLE_WIDTH
+	var current_cam_left := clampf(camera.position.x - VISIBLE_WIDTH / 2.0, stage_left_min, max_left)
+	var fighter_left := minf(p1.position.x, p2.position.x)
+	var fighter_right := maxf(p1.position.x, p2.position.x)
+	var desired_cam_left := current_cam_left
+	var min_cam_left := fighter_right - (VISIBLE_WIDTH - CAMERA_RIGHT_MARGIN)
+	var max_cam_left_for_left_margin := fighter_left - CAMERA_LEFT_MARGIN
+	if min_cam_left <= max_cam_left_for_left_margin:
+		desired_cam_left = clampf(current_cam_left, min_cam_left, max_cam_left_for_left_margin)
+	else:
+		var fighter_center := (fighter_left + fighter_right) * 0.5
+		desired_cam_left = fighter_center - VISIBLE_WIDTH * 0.5
+	desired_cam_left = clampf(desired_cam_left, stage_left_min, max_left)
+	var effective_cam_left := desired_cam_left if force_snap else lerpf(current_cam_left, desired_cam_left, CAMERA_PAN_SPEED * (1.0 / 60.0))
+	effective_cam_left = clampf(effective_cam_left, stage_left_min, max_left)
+	camera.position.x = effective_cam_left + VISIBLE_WIDTH / 2.0
+	camera.position.y = CAMERA_Y
+	if stage and stage.has_method("set_camera_left"):
+		stage.set_camera_left(effective_cam_left)
+
+func _enforce_fighter_separation() -> void:
+	if not (p1 and p2):
+		return
+	var left_fighter: Player = p1 if p1.position.x <= p2.position.x else p2
+	var right_fighter: Player = p2 if left_fighter == p1 else p1
+	var distance := right_fighter.position.x - left_fighter.position.x
+	if distance <= MAX_FIGHTER_SEPARATION:
+		return
+	var excess := distance - MAX_FIGHTER_SEPARATION
+	var left_moving_away := left_fighter.vel_x < 0.0
+	var right_moving_away := right_fighter.vel_x > 0.0
+	if left_moving_away and right_moving_away:
+		left_fighter.position.x += excess * 0.5
+		right_fighter.position.x -= excess * 0.5
+	elif left_moving_away:
+		left_fighter.position.x += excess
+	elif right_moving_away:
+		right_fighter.position.x -= excess
+	else:
+		left_fighter.position.x += excess * 0.5
+		right_fighter.position.x -= excess * 0.5
+	left_fighter.position.x = clampf(left_fighter.position.x, left_fighter.stage_left_bound, left_fighter.stage_right_bound)
+	right_fighter.position.x = clampf(right_fighter.position.x, right_fighter.stage_left_bound, right_fighter.stage_right_bound)
 
 func _start_match() -> void:
 	app_state = AppState.GAME
@@ -561,6 +608,7 @@ func _start_next_round(first_round: bool = false) -> void:
 				p2.stage_right_bound = right_bound
 	if ai:
 		ai.reset()
+	_apply_camera_tracking(true)
 	if announcement_label:
 		announcement_label.visible = true
 		announcement_label.text = "ROUND %d INITIALIZING" % current_round
@@ -812,6 +860,8 @@ func _update_debug_label() -> void:
 	else:
 		lines.append("P2 node=NULL")
 	if stage and stage.has_method("get_camera_left") and stage.has_method("get_max_scroll"):
-		lines.append("Cam x=%.1f left=%.1f/%.1f" % [camera.position.x, stage.get_camera_left(), stage.get_max_scroll()])
+		var left_bound := p1.stage_left_bound if p1 else -1.0
+		var right_bound := p1.stage_right_bound if p1 else -1.0
+		lines.append("Cam x=%.1f left=%.1f/%.1f bounds=%.0f..%.0f" % [camera.position.x, stage.get_camera_left(), stage.get_max_scroll(), left_bound, right_bound])
 	debug_label.visible = true
 	debug_label.text = "\n".join(lines)

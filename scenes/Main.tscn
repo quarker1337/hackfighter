@@ -44,8 +44,8 @@ position = Vector2(550, 315)
 [node name="Camera2D" type="Camera2D" parent="SubViewportContainer/GameViewport/GameRoot"]
 unique_name_in_owner = true
 position = Vector2(256, 144)
-limit_left = 140.0
-limit_right = 682.0
+limit_left = -1000000.0
+limit_right = 1000000.0
 
 [node name="DebugLabel" type="Label" parent="."]
 layout_mode = 1
