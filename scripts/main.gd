@@ -52,6 +52,10 @@ var p1_health_label: Label = null
 var p2_health_label: Label = null
 var p1_name_label: Label = null
 var p2_name_label: Label = null
+var p1_hud_panel: ColorRect = null
+var p2_hud_panel: ColorRect = null
+var timer_bg: ColorRect = null
+var timer_border: ColorRect = null
 var timer_label: Label = null
 var announcement_label: Label = null
 var menu_overlay: ColorRect = null
@@ -743,6 +747,8 @@ func _animate_menu_ui() -> void:
 func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
 		impact_flash,
+		p1_hud_panel, p2_hud_panel,
+		timer_bg, timer_border,
 		p1_health_bg, p2_health_bg,
 		p1_health_border, p2_health_border,
 		p1_health_lag_bar, p2_health_lag_bar,
@@ -880,29 +886,41 @@ func _create_hud() -> void:
 	add_child(impact_flash)
 
 	# Health bar backgrounds
+	p1_hud_panel = ColorRect.new()
+	p1_hud_panel.position = Vector2(HUD_P1_BAR_X - 10, HUD_BAR_Y - 8)
+	p1_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
+	p1_hud_panel.color = Color(0.03, 0.06, 0.09, 0.88)
+	add_child(p1_hud_panel)
+
+	p2_hud_panel = ColorRect.new()
+	p2_hud_panel.position = Vector2(HUD_P2_BAR_X - 10, HUD_BAR_Y - 8)
+	p2_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
+	p2_hud_panel.color = Color(0.03, 0.06, 0.09, 0.88)
+	add_child(p2_hud_panel)
+
 	p1_health_bg = ColorRect.new()
 	p1_health_bg.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bg.color = Color(0.25, 0.25, 0.25)
+	p1_health_bg.color = Color(0.05, 0.09, 0.12)
 	add_child(p1_health_bg)
+
 	p1_health_border = ColorRect.new()
-	p1_health_border.position = Vector2(HUD_P1_BAR_X - 1, HUD_BAR_Y - 1)
-	p1_health_border.size = Vector2(HUD_BAR_WIDTH + 2, HUD_BAR_HEIGHT + 2)
-	p1_health_border.color = Color(0.7, 0.7, 0.7)
-	p1_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p1_health_border.position = Vector2(HUD_P1_BAR_X - 2, HUD_BAR_Y - 2)
+	p1_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
+	p1_health_border.color = Color(0.0, 0.92, 0.82)
 	add_child(p1_health_border)
 	move_child(p1_health_border, p1_health_bg.get_index())
 
 	p2_health_bg = ColorRect.new()
 	p2_health_bg.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bg.color = Color(0.25, 0.25, 0.25)
+	p2_health_bg.color = Color(0.05, 0.09, 0.12)
 	add_child(p2_health_bg)
+
 	p2_health_border = ColorRect.new()
-	p2_health_border.position = Vector2(HUD_P2_BAR_X - 1, HUD_BAR_Y - 1)
-	p2_health_border.size = Vector2(HUD_BAR_WIDTH + 2, HUD_BAR_HEIGHT + 2)
-	p2_health_border.color = Color(0.7, 0.7, 0.7)
-	p2_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	p2_health_border.position = Vector2(HUD_P2_BAR_X - 2, HUD_BAR_Y - 2)
+	p2_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
+	p2_health_border.color = Color(0.0, 0.92, 0.82)
 	add_child(p2_health_border)
 	move_child(p2_health_border, p2_health_bg.get_index())
 
@@ -910,60 +928,72 @@ func _create_hud() -> void:
 	p1_health_lag_bar = ColorRect.new()
 	p1_health_lag_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	p1_health_lag_bar.color = Color(1.0, 0.48, 0.18)
 	add_child(p1_health_lag_bar)
 
 	p2_health_lag_bar = ColorRect.new()
 	p2_health_lag_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	p2_health_lag_bar.color = Color(1.0, 0.48, 0.18)
 	add_child(p2_health_lag_bar)
 
 	p1_health_bar = ColorRect.new()
 	p1_health_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bar.color = Color.GREEN
+	p1_health_bar.color = Color(0.16, 1.0, 0.72)
 	add_child(p1_health_bar)
 
 	p2_health_bar = ColorRect.new()
 	p2_health_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bar.color = Color.GREEN
+	p2_health_bar.color = Color(0.16, 1.0, 0.72)
 	add_child(p2_health_bar)
 
 	# Health text labels
 	p1_name_label = Label.new()
-	p1_name_label.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
-	p1_name_label.add_theme_font_size_override("font_size", 10)
-	p1_name_label.add_theme_color_override("font_color", Color.WHITE)
+	p1_name_label.position = Vector2(HUD_P1_BAR_X + 2, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
+	p1_name_label.add_theme_font_size_override("font_size", 11)
+	p1_name_label.add_theme_color_override("font_color", Color(0.84, 0.98, 1.0))
 	p1_name_label.text = "OLD_PROTOTYPE_FIGHTER"
 	add_child(p1_name_label)
 
 	p2_name_label = Label.new()
-	p2_name_label.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - 22, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
-	p2_name_label.add_theme_font_size_override("font_size", 10)
-	p2_name_label.add_theme_color_override("font_color", Color.WHITE)
+	p2_name_label.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - 30, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
+	p2_name_label.add_theme_font_size_override("font_size", 11)
+	p2_name_label.add_theme_color_override("font_color", Color(0.84, 0.98, 1.0))
 	p2_name_label.text = "OLD_PROTOTYPE_FIGHTER"
 	add_child(p2_name_label)
 
 	p1_health_label = Label.new()
-	p1_health_label.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 14)
+	p1_health_label.position = Vector2(HUD_P1_BAR_X + HUD_BAR_WIDTH - 54, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
 	p1_health_label.add_theme_font_size_override("font_size", 10)
-	p1_health_label.add_theme_color_override("font_color", Color.WHITE)
+	p1_health_label.add_theme_color_override("font_color", Color(0.42, 0.95, 0.86))
 	add_child(p1_health_label)
 
 	p2_health_label = Label.new()
-	p2_health_label.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 14)
+	p2_health_label.position = Vector2(HUD_P2_BAR_X + 4, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
 	p2_health_label.add_theme_font_size_override("font_size", 10)
-	p2_health_label.add_theme_color_override("font_color", Color.WHITE)
+	p2_health_label.add_theme_color_override("font_color", Color(0.42, 0.95, 0.86))
 	add_child(p2_health_label)
 
+	timer_border = ColorRect.new()
+	timer_border.position = Vector2(HUD_TIMER_X - 8, HUD_TIMER_Y - 4)
+	timer_border.size = Vector2(44, 28)
+	timer_border.color = Color(0.0, 0.92, 0.82)
+	add_child(timer_border)
+
+	timer_bg = ColorRect.new()
+	timer_bg.position = Vector2(HUD_TIMER_X - 6, HUD_TIMER_Y - 2)
+	timer_bg.size = Vector2(40, 24)
+	timer_bg.color = Color(0.05, 0.08, 0.11, 0.94)
+	add_child(timer_bg)
+
 	timer_label = Label.new()
-	timer_label.position = Vector2(HUD_TIMER_X, HUD_TIMER_Y)
-	timer_label.size = Vector2(28, 20)
+	timer_label.position = Vector2(HUD_TIMER_X - 2, HUD_TIMER_Y - 1)
+	timer_label.size = Vector2(32, 22)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.add_theme_font_size_override("font_size", 14)
-	timer_label.add_theme_color_override("font_color", Color.YELLOW)
+	timer_label.add_theme_font_size_override("font_size", 16)
+	timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
 	add_child(timer_label)
 
 	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
@@ -1021,32 +1051,36 @@ func _update_hud() -> void:
 
 	timer_label.text = "%02d" % int(ceil(round_time_left))
 	if round_time_left <= 10.0 and not intro_active:
-		timer_label.add_theme_color_override("font_color", Color(1.0, 0.34, 0.34))
+		timer_label.add_theme_color_override("font_color", Color(1.0, 0.34, 0.40))
+		timer_border.color = Color(1.0, 0.34, 0.40)
 	else:
-		timer_label.add_theme_color_override("font_color", Color(0.28, 0.95, 0.85))
+		timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
+		timer_border.color = Color(0.0, 0.92, 0.82)
 	if intro_active:
 		timer_label.modulate.a = 0.7
+		timer_bg.modulate.a = 0.78
 	else:
 		timer_label.modulate.a = 1.0
+		timer_bg.modulate.a = 1.0
 
 func _update_round_dots() -> void:
 	for i in range(ROUNDS_TO_WIN):
 		if i < p1_round_wins:
-			p1_round_dots[i].color = Color.YELLOW
+			p1_round_dots[i].color = Color(0.30, 1.0, 0.90)
 		else:
-			p1_round_dots[i].color = Color(0.3, 0.3, 0.3)
+			p1_round_dots[i].color = Color(0.16, 0.24, 0.28)
 		if i < p2_round_wins:
-			p2_round_dots[i].color = Color.YELLOW
+			p2_round_dots[i].color = Color(0.30, 1.0, 0.90)
 		else:
-			p2_round_dots[i].color = Color(0.3, 0.3, 0.3)
+			p2_round_dots[i].color = Color(0.16, 0.24, 0.28)
 
 func _health_color(ratio: float) -> Color:
-	if ratio > 0.5:
-		return Color.GREEN
-	elif ratio > 0.25:
-		return Color.YELLOW
+	if ratio > 0.6:
+		return Color(0.16, 1.0, 0.72)
+	elif ratio > 0.3:
+		return Color(0.98, 0.82, 0.22)
 	else:
-		return Color.RED
+		return Color(1.0, 0.30, 0.38)
 
 # ── Debug ─────────────────────────────────────────────────────────────
 
