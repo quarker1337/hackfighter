@@ -151,12 +151,13 @@ func _ready() -> void:
 	sprite.animation_finished.connect(_on_animation_finished)
 	_update_shadow()
 
-	# Create in-game debug overlay — child of PLAYER, not sprite
+	# Create in-game debug overlay — hidden by default for player-facing view
 	debug_overlay = Label.new()
 	debug_overlay.position = Vector2(-80, -220)
 	debug_overlay.add_theme_font_size_override("font_size", 10)
 	debug_overlay.add_theme_color_override("font_color", Color.YELLOW)
 	debug_overlay.z_index = 999
+	debug_overlay.visible = false
 	add_child(debug_overlay)
 
 func _apply_character_visuals() -> void:
