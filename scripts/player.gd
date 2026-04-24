@@ -24,19 +24,26 @@ const ATTACKS: Dictionary = {
 	"heavyKick":   { "startup": 7,  "active": 4, "recovery": 14, "damage": 100, "hitstun": 20, "blockstun": 12, "pushback": 5, "type": "low", "knockdown": true },
 }
 
+const TEKNIUM_ATTACKS: Dictionary = {
+	"heavyPunch":  { "startup": 3,  "active": 5, "recovery": 13, "damage": 80,  "hitstun": 16, "blockstun": 10, "pushback": 4, "type": "mid" },
+	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7,  "pushback": 3, "type": "mid" },
+}
+
 # ── Animation speeds (JS frames per sprite-frame) ────────────────────
 const ANIM_SPEED: Dictionary = {
-	"idle":       8,
-	"walking":    6,
-	"jump":       5,
-	"crouching":  4,
-	"lightpunch": 4,
-	"heavypunch": 5,
-	"lightkick":  4,
-	"heavykick":  5,
-	"victory":    8,
-	"abdomen_hit": 4,
-	"head_hit":   4,
+	"idle":         8,
+	"walking":      6,
+	"jump":         5,
+	"crouching":    4,
+	"lightpunch":   4,
+	"heavypunch":   5,
+	"lightkick":    4,
+	"heavykick":    5,
+	"victory":      8,
+	"victory_loop": 8,
+	"abdomen_hit":  4,
+	"head_hit":     4,
+	"ko":           6,
 }
 
 # ── Hitbox/Hurtbox constants (from JS config, relative to position = feet center) ──
@@ -52,6 +59,12 @@ const ATTACK_HITBOX: Dictionary = {
 	"heavyKick":   Rect2(10, -20, 55, 15),
 }
 
+const TEKNIUM_ATTACK_HITBOX: Dictionary = {
+	"heavyPunch":  Rect2(8, -68, 68, 24),
+	"lightKick":   Rect2(-6, -52, 78, 28),
+	"heavyKick":   Rect2(-2, -34, 84, 26),
+}
+
 # ── Knockdown / getting up timings (from JS config) ──────────────────
 const KNOCKDOWN_FRAMES: int    = 40
 const GETTING_UP_FRAMES: int   = 20
@@ -60,6 +73,12 @@ const GETTING_UP_FRAMES: int   = 20
 @export var player_index: int = 1
 @export var character_name: String = "Teknium"
 @export var facing_right: bool = true
+
+const SHADOW_TEX_SIZE := Vector2i(128, 52)
+const SHADOW_FEET_OFFSET_Y := -40.0
+const SHADOW_GROUND_ALPHA := 0.72
+const SHADOW_AIR_ALPHA := 0.34
+const SHADOW_MIN_SCALE := 0.55
 
 # ── Public state ──────────────────────────────────────────────────────
 var health: int = MAX_HEALTH
@@ -115,6 +134,9 @@ var crouch_phase: String = ""  # "entering", "holding", "exiting"
 # ── Node refs ─────────────────────────────────────────────────────────
 @onready var sprite: AnimatedSprite2D = $AnimatedSprite2D
 
+var shadow_sprite: Sprite2D = null
+var shadow_base_scale: Vector2 = Vector2.ONE
+
 # Debug overlay — created programmatically
 var debug_overlay: Label = null
 
@@ -124,8 +146,10 @@ signal died
 
 func _ready() -> void:
 	health = MAX_HEALTH
+	_create_shadow()
 	_apply_character_visuals()
 	sprite.animation_finished.connect(_on_animation_finished)
+	_update_shadow()
 
 	# Create in-game debug overlay — child of PLAYER, not sprite
 	debug_overlay = Label.new()
@@ -140,8 +164,12 @@ func _apply_character_visuals() -> void:
 	sprite.sprite_frames = frames
 	if character_name.to_lower() == "teknium":
 		sprite.scale = Vector2(0.78, 0.78)
+		shadow_base_scale = Vector2(1.0, 0.62)
 	else:
 		sprite.scale = Vector2(1.33333, 1.33333)
+		shadow_base_scale = Vector2(1.0, 0.62)
+	if shadow_sprite:
+		shadow_sprite.scale = shadow_base_scale
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
 		sprite.play("idle")
 	else:
@@ -151,18 +179,60 @@ func set_character(value: String) -> void:
 	character_name = value
 	if sprite:
 		_apply_character_visuals()
+		_update_shadow()
+
+func _create_shadow() -> void:
+	shadow_sprite = Sprite2D.new()
+	shadow_sprite.name = "ShadowSprite"
+	shadow_sprite.centered = true
+	shadow_sprite.z_index = 90
+	shadow_sprite.texture = _build_shadow_texture()
+	shadow_sprite.position = Vector2(0.0, SHADOW_FEET_OFFSET_Y)
+	add_child(shadow_sprite)
+	move_child(shadow_sprite, 0)
+
+func _build_shadow_texture() -> ImageTexture:
+	var image := Image.create(SHADOW_TEX_SIZE.x, SHADOW_TEX_SIZE.y, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	var center := Vector2(float(SHADOW_TEX_SIZE.x) * 0.5, float(SHADOW_TEX_SIZE.y) * 0.5)
+	var radius_x := float(SHADOW_TEX_SIZE.x) * 0.5
+	var radius_y := float(SHADOW_TEX_SIZE.y) * 0.5
+	for y in range(SHADOW_TEX_SIZE.y):
+		for x in range(SHADOW_TEX_SIZE.x):
+			var dx := (float(x) - center.x) / radius_x
+			var dy := (float(y) - center.y) / radius_y
+			var dist := sqrt(dx * dx + dy * dy)
+			if dist >= 1.0:
+				continue
+			var alpha := pow(1.0 - dist, 1.8) * 0.82
+			image.set_pixel(x, y, Color(0, 0, 0, alpha))
+	return ImageTexture.create_from_image(image)
+
+func _update_shadow() -> void:
+	if not shadow_sprite:
+		return
+	var height_ratio := 0.0
+	if ground_y > 0.0:
+		height_ratio = clampf((ground_y - position.y) / 120.0, 0.0, 1.0)
+	var scale_drop := lerpf(1.0, SHADOW_MIN_SCALE, height_ratio)
+	shadow_sprite.scale = shadow_base_scale * scale_drop
+	var grounded_shadow_y := ground_y - position.y + SHADOW_FEET_OFFSET_Y if ground_y > 0.0 else SHADOW_FEET_OFFSET_Y
+	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
+	shadow_sprite.modulate = Color(0.0, 0.0, 0.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
 func _physics_process(_delta: float) -> void:
 	just_landed = false
 
 	if hitstop_frames > 0:
 		hitstop_frames -= 1
+		_update_shadow()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		_save_prev_ai_input()
 		return
 
 	if not control_enabled:
+		_update_shadow()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		_save_prev_ai_input()
@@ -176,6 +246,7 @@ func _physics_process(_delta: float) -> void:
 			_set_animation("idle")
 		# Apply pending pushback during hitstun
 		_apply_pushback()
+		_update_shadow()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		_save_prev_ai_input()
@@ -188,6 +259,7 @@ func _physics_process(_delta: float) -> void:
 			is_in_blockstun = false
 			_set_animation("idle")
 		_apply_pushback()
+		_update_shadow()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		_save_prev_ai_input()
@@ -201,6 +273,7 @@ func _physics_process(_delta: float) -> void:
 			getting_up_timer = GETTING_UP_FRAMES
 			is_knocked_down = false
 			_set_animation("idle")  # no "getting up" sprite, just go to idle
+		_update_shadow()
 		_update_debug_overlay()
 		sprite.flip_h = not facing_right
 		_save_prev_ai_input()
@@ -247,7 +320,7 @@ func _physics_process(_delta: float) -> void:
 	# ── Horizontal movement ───────────────────────────────────────────
 	vel_x = 0.0
 	if current_attack == "" or in_jump:
-		if not is_blocking:
+		if not is_blocking and not wants_down:
 			if wants_right and not wants_left:
 				vel_x = WALK_SPEED
 			elif wants_left and not wants_right:
@@ -261,11 +334,11 @@ func _physics_process(_delta: float) -> void:
 	# Only stops THIS player. Never pushes the other.
 	if other_player and vel_x != 0.0 and not in_jump:
 		var dist := position.x - other_player.position.x
-		if absf(dist) < 45.0:
+		if absf(dist) < 85.0:
 			if dist > 0:
-				position.x = other_player.position.x + 45.0
+				position.x = other_player.position.x + 85.0
 			else:
-				position.x = other_player.position.x - 45.0
+				position.x = other_player.position.x - 85.0
 			position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── Jump physics ──────────────────────────────────────────────────
@@ -299,7 +372,7 @@ func _physics_process(_delta: float) -> void:
 	# ── Attack timing ─────────────────────────────────────────────────
 	if current_attack != "":
 		attack_frame += 1
-		var atk: Dictionary = ATTACKS[current_attack]
+		var atk: Dictionary = get_attack_data(current_attack)
 		var total_frames: int = atk.startup + atk.active + atk.recovery
 		if attack_frame >= total_frames:
 			current_attack = ""
@@ -322,6 +395,8 @@ func _physics_process(_delta: float) -> void:
 		_set_animation("walking")
 	else:
 		_set_animation("idle")
+
+	_update_shadow()
 
 	# ── Animation update (not for jump — frames are manual) ───────────
 	if not in_jump:
@@ -380,6 +455,7 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 	facing_right = face_right
 	_apply_character_visuals()
 	_set_animation("idle")
+	_update_shadow()
 
 # ── Combat methods ────────────────────────────────────────────────────
 
@@ -387,16 +463,26 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 func is_attack_active() -> bool:
 	if current_attack == "":
 		return false
-	var atk: Dictionary = ATTACKS[current_attack]
+	var atk: Dictionary = get_attack_data(current_attack)
 	var active_start: int = atk.startup
 	var active_end: int = atk.startup + atk.active - 1
 	return attack_frame >= active_start and attack_frame <= active_end
+
+func get_attack_data(attack_name: String) -> Dictionary:
+	if character_name.to_lower() == "teknium" and TEKNIUM_ATTACKS.has(attack_name):
+		return TEKNIUM_ATTACKS[attack_name]
+	return ATTACKS[attack_name]
+
+func get_attack_hitbox_data(attack_name: String) -> Rect2:
+	if character_name.to_lower() == "teknium" and TEKNIUM_ATTACK_HITBOX.has(attack_name):
+		return TEKNIUM_ATTACK_HITBOX[attack_name]
+	return ATTACK_HITBOX.get(attack_name, Rect2())
 
 ## Returns the attack hitbox in world coordinates
 func get_attack_hitbox() -> Rect2:
 	if current_attack == "":
 		return Rect2()
-	var base: Rect2 = ATTACK_HITBOX.get(current_attack, Rect2())
+	var base: Rect2 = get_attack_hitbox_data(current_attack)
 	if base.size.x == 0:
 		return Rect2()
 	var dir: float = 1.0 if facing_right else -1.0
@@ -415,16 +501,17 @@ func apply_hitstop(frames: int) -> void:
 func apply_hit(damage: int, hitstun_frames: int, pushback: float, knockdown: bool) -> void:
 	health = max(0, health - damage)
 	has_hit = true  # mark attacker's hit as connected (set by caller, but safe to double-set)
+	var was_fatal := health <= 0
 
 	if knockdown:
 		is_knocked_down = true
 		knockdown_timer = KNOCKDOWN_FRAMES
 		is_in_hitstun = false
-		_set_animation("abdomen_hit")
+		_set_animation("ko" if was_fatal else "abdomen_hit")
 	else:
 		is_in_hitstun = true
 		hitstun_timer = hitstun_frames
-		_set_animation("abdomen_hit")
+		_set_animation("ko" if was_fatal else "abdomen_hit")
 
 	pending_pushback = pushback
 
@@ -503,7 +590,7 @@ func _update_animation() -> void:
 
 	# For AnimatedSprite2D, let it auto-advance.
 	# Sync the frame counter for debug overlay consistency.
-	var looping_anims: Array = ["idle", "walking"]
+	var looping_anims: Array = ["idle", "walking", "victory_loop"]
 	if not looping_anims.has(current_anim):
 		# Clamp to last frame for one-shot anims
 		if sprite.sprite_frames and sprite.sprite_frames.has_animation(current_anim):
@@ -512,8 +599,10 @@ func _update_animation() -> void:
 				anim_frame = frame_count - 1
 
 func _on_animation_finished() -> void:
+	if current_anim == "victory" and sprite.sprite_frames and sprite.sprite_frames.has_animation("victory_loop") and sprite.sprite_frames.get_frame_count("victory_loop") > 0:
+		_set_animation("victory_loop")
+		return
 	# One-shot animations end naturally — state handles transitions
-	pass
 
 # ── Debug overlay ─────────────────────────────────────────────────────
 

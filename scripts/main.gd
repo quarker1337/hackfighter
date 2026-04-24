@@ -9,6 +9,7 @@ extends Control
 @onready var debug_label: Label = $DebugLabel
 @onready var stage: Node = %Stage
 @onready var game_view: SubViewportContainer = $SubViewportContainer
+@onready var game_root: Node2D = $SubViewportContainer/GameViewport/GameRoot
 
 var ai: SimpleAI = null
 
@@ -41,6 +42,8 @@ const HITSTOP_ON_BLOCK: int = 3
 ## HUD nodes (created programmatically)
 var p1_health_bar: ColorRect = null
 var p2_health_bar: ColorRect = null
+var p1_health_lag_bar: ColorRect = null
+var p2_health_lag_bar: ColorRect = null
 var p1_health_bg: ColorRect = null
 var p2_health_bg: ColorRect = null
 var p1_health_border: ColorRect = null
@@ -92,8 +95,23 @@ const HUD_TIMER_Y: float = 16.0
 const HUD_DOT_Y: float = 36.0
 const HUD_DOT_SPACING: float = 14.0
 const HUD_DOT_SIZE: float = 8.0
+const HEALTH_LAG_SPEED: float = 180.0
+const CAMERA_SHAKE_DECAY: float = 10.0
+const IMPACT_FLASH_DECAY: float = 8.0
 
 var debug_timer := 0.0
+var p1_display_health: float = 1000.0
+var p2_display_health: float = 1000.0
+var camera_shake_timer: float = 0.0
+var camera_shake_strength: float = 0.0
+var impact_flash: ColorRect = null
+var impact_flash_alpha: float = 0.0
+var fx_layer: Node2D = null
+var active_hit_fx: Array[Dictionary] = []
+
+const HIT_FX_LIGHT_DURATION: float = 0.12
+const HIT_FX_HEAVY_DURATION: float = 0.18
+const HIT_FX_BLOCK_DURATION: float = 0.10
 
 func _ready() -> void:
 	print("Stoat Fighter 2 — Godot port initialized")
@@ -116,15 +134,20 @@ func _ready() -> void:
 	camera.make_current()
 
 	# Create HUD
+	_create_fx_layer()
 	_create_hud()
 	_create_menu_ui()
 	_enter_menu()
 
-	# Show debug info for 3 seconds
+	# Keep debug overlay visible during diagnosis
 	if debug_label:
-		debug_timer = 3.0
+		debug_timer = 0.0
+		debug_label.visible = true
 
 func _process(delta: float) -> void:
+	_update_camera_fx(delta)
+	_update_impact_flash(delta)
+	_update_hit_fx(delta)
 	if app_state != AppState.GAME:
 		menu_fx_time += delta
 		_process_menu_input()
@@ -217,7 +240,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 	if not _box_overlap(atk_hitbox, def_hurtbox):
 		return
 
-	var atk_data: Dictionary = attacker.ATTACKS[attacker.current_attack]
+	var atk_data: Dictionary = attacker.get_attack_data(attacker.current_attack)
 	attacker.has_hit = true
 
 	# Pushback direction: defender pushed AWAY from attacker
@@ -240,6 +263,8 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		attacker.apply_hitstop(HITSTOP_ON_BLOCK)
 		defender.apply_hitstop(HITSTOP_ON_BLOCK)
 		SoundManager.play_block_sound()
+		_spawn_hit_fx(_impact_position(attacker, defender), true, false)
+		_trigger_impact_flash(Color(0.85, 0.92, 1.0, 1.0), 0.10)
 	else:
 		# Clean hit
 		var knockdown: bool = atk_data.get("knockdown", false)
@@ -248,6 +273,14 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		attacker.apply_hitstop(HITSTOP_ON_HIT)
 		defender.apply_hitstop(HITSTOP_ON_HIT)
 		SoundManager.play_hit_sound(attacker.current_attack)
+		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick"
+		var fatal_hit := defender.health <= 0
+		_spawn_hit_fx(_impact_position(attacker, defender), false, heavy_hit or fatal_hit)
+		if heavy_hit:
+			_trigger_camera_shake(0.18, 5.0 if attacker.current_attack == "heavyKick" else 4.0)
+			_trigger_impact_flash(Color(1.0, 0.96, 0.90, 1.0), 0.16)
+		else:
+			_trigger_impact_flash(Color(1.0, 1.0, 1.0, 1.0), 0.08)
 		if defender.health <= 0:
 			SoundManager.play_ko()
 
@@ -277,10 +310,147 @@ func _apply_camera_tracking(force_snap: bool = false) -> void:
 	desired_cam_left = clampf(desired_cam_left, stage_left_min, max_left)
 	var effective_cam_left := desired_cam_left if force_snap else lerpf(current_cam_left, desired_cam_left, CAMERA_PAN_SPEED * (1.0 / 60.0))
 	effective_cam_left = clampf(effective_cam_left, stage_left_min, max_left)
-	camera.position.x = effective_cam_left + VISIBLE_WIDTH / 2.0
-	camera.position.y = CAMERA_Y
+	var shake_offset := _get_camera_shake_offset() if not force_snap else Vector2.ZERO
+	camera.position.x = effective_cam_left + VISIBLE_WIDTH / 2.0 + shake_offset.x
+	camera.position.y = CAMERA_Y + shake_offset.y
 	if stage and stage.has_method("set_camera_left"):
 		stage.set_camera_left(effective_cam_left)
+
+func _trigger_camera_shake(duration: float, strength: float) -> void:
+	camera_shake_timer = maxf(camera_shake_timer, duration)
+	camera_shake_strength = maxf(camera_shake_strength, strength)
+
+func _update_camera_fx(delta: float) -> void:
+	if camera_shake_timer > 0.0:
+		camera_shake_timer = maxf(0.0, camera_shake_timer - delta)
+	camera_shake_strength = move_toward(camera_shake_strength, 0.0, CAMERA_SHAKE_DECAY * delta)
+
+func _get_camera_shake_offset() -> Vector2:
+	if camera_shake_timer <= 0.0 or camera_shake_strength <= 0.01:
+		return Vector2.ZERO
+	var t := Time.get_ticks_msec() * 0.001
+	return Vector2(sin(t * 83.0), cos(t * 61.0)) * camera_shake_strength
+
+func _trigger_impact_flash(color: Color, alpha: float) -> void:
+	if not impact_flash:
+		return
+	impact_flash.color = Color(color.r, color.g, color.b, maxf(impact_flash_alpha, alpha))
+	impact_flash_alpha = maxf(impact_flash_alpha, alpha)
+	impact_flash.visible = true
+
+func _update_impact_flash(delta: float) -> void:
+	if not impact_flash:
+		return
+	if impact_flash_alpha <= 0.0:
+		impact_flash.visible = false
+		return
+	impact_flash_alpha = maxf(0.0, impact_flash_alpha - IMPACT_FLASH_DECAY * delta)
+	impact_flash.color.a = impact_flash_alpha
+	impact_flash.visible = impact_flash_alpha > 0.0
+
+func _create_fx_layer() -> void:
+	if fx_layer or not game_root:
+		return
+	fx_layer = Node2D.new()
+	fx_layer.name = "FxLayer"
+	fx_layer.z_index = 500
+	game_root.add_child(fx_layer)
+
+func _impact_visual_y_offset(attack_name: String) -> float:
+	match attack_name:
+		"lightPunch":
+			return 92.0
+		"heavyPunch":
+			return 106.0
+		"lightKick":
+			return 72.0
+		"heavyKick":
+			return 92.0
+		_:
+			return 84.0
+
+func _impact_position(attacker: Player, defender: Player) -> Vector2:
+	var atk := attacker.get_attack_hitbox()
+	var hurt := defender.get_hurtbox()
+	var left := maxf(atk.position.x, hurt.position.x)
+	var right := minf(atk.position.x + atk.size.x, hurt.position.x + hurt.size.x)
+	var visual_y := defender.position.y - _impact_visual_y_offset(attacker.current_attack)
+	if right > left:
+		return Vector2((left + right) * 0.5, visual_y)
+	return defender.position + Vector2(0.0, -_impact_visual_y_offset(attacker.current_attack))
+
+func _spawn_hit_fx(world_pos: Vector2, blocked: bool, heavy: bool) -> void:
+	if not fx_layer:
+		return
+	var fx_root := Node2D.new()
+	fx_root.position = world_pos
+	fx_root.z_index = 500
+	var colors := _hit_fx_colors(blocked, heavy)
+	var duration := HIT_FX_BLOCK_DURATION if blocked else (HIT_FX_HEAVY_DURATION if heavy else HIT_FX_LIGHT_DURATION)
+	var scale_mul := 0.85 if blocked else (1.45 if heavy else 1.0)
+	var ring := Polygon2D.new()
+	ring.polygon = _star_points(12.0 * scale_mul, 34.0 * scale_mul, 8)
+	ring.color = colors[0]
+	fx_root.add_child(ring)
+	var core := Polygon2D.new()
+	core.polygon = _star_points(5.0 * scale_mul, 15.0 * scale_mul, 6)
+	core.color = colors[1]
+	fx_root.add_child(core)
+	for i in range(3 if blocked else (6 if heavy else 4)):
+		var shard := Line2D.new()
+		shard.width = 2.0 if heavy else 1.5
+		shard.default_color = colors[2]
+		var angle := randf() * TAU
+		var dir := Vector2.RIGHT.rotated(angle)
+		var inner := dir * (7.0 * scale_mul)
+		var outer := dir * (26.0 * scale_mul + randf() * 10.0 * scale_mul)
+		shard.points = PackedVector2Array([inner, outer])
+		fx_root.add_child(shard)
+	fx_layer.add_child(fx_root)
+	active_hit_fx.append({
+		"node": fx_root,
+		"age": 0.0,
+		"duration": duration,
+		"blocked": blocked,
+		"heavy": heavy,
+	})
+
+func _update_hit_fx(delta: float) -> void:
+	if active_hit_fx.is_empty():
+		return
+	for i in range(active_hit_fx.size() - 1, -1, -1):
+		var fx: Dictionary = active_hit_fx[i]
+		var node := fx.get("node") as Node2D
+		if node == null or not is_instance_valid(node):
+			active_hit_fx.remove_at(i)
+			continue
+		var age: float = fx.get("age", 0.0) + delta
+		var duration: float = fx.get("duration", 0.12)
+		var t := clampf(age / duration, 0.0, 1.0)
+		fx["age"] = age
+		node.scale = Vector2.ONE * (1.0 + t * (0.35 if fx.get("blocked", false) else 0.55))
+		node.rotation += delta * (6.0 if fx.get("heavy", false) else 4.0)
+		node.modulate.a = 1.0 - t
+		if age >= duration:
+			node.queue_free()
+			active_hit_fx.remove_at(i)
+		else:
+			active_hit_fx[i] = fx
+
+func _hit_fx_colors(blocked: bool, heavy: bool) -> Array[Color]:
+	if blocked:
+		return [Color(0.15, 1.0, 0.78, 0.92), Color(0.92, 1.0, 1.0, 0.95), Color(0.12, 0.88, 0.98, 0.92)]
+	if heavy:
+		return [Color(0.35, 1.0, 0.35, 0.94), Color(1.0, 1.0, 1.0, 0.98), Color(0.95, 1.0, 0.25, 0.92)]
+	return [Color(0.18, 1.0, 0.28, 0.92), Color(1.0, 1.0, 1.0, 0.95), Color(0.58, 1.0, 0.78, 0.88)]
+
+func _star_points(inner_radius: float, outer_radius: float, spikes: int) -> PackedVector2Array:
+	var pts := PackedVector2Array()
+	for i in range(spikes * 2):
+		var angle := (TAU * float(i) / float(spikes * 2)) - PI * 0.5
+		var radius := outer_radius if i % 2 == 0 else inner_radius
+		pts.append(Vector2(cos(angle), sin(angle)) * radius)
+	return pts
 
 func _enforce_fighter_separation() -> void:
 	if not (p1 and p2):
@@ -520,7 +690,7 @@ func _update_menu_ui() -> void:
 	match app_state:
 		AppState.MENU:
 			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			menu_title_label.text = "HACKFIGHTER"
+			menu_title_label.text = "HACKFIGHTER SYNC 1777016001"
 			var items := ["START SIMULATION", "CONTROL MAP", "SYSTEM OPTIONS"]
 			var lines: Array[String] = []
 			for i in range(items.size()):
@@ -566,7 +736,16 @@ func _animate_menu_ui() -> void:
 			line.modulate.a = 0.025 + 0.035 * (0.5 + 0.5 * sin(menu_fx_time * 3.2 + float(i) * 0.45))
 
 func _set_game_hud_visible(vis: bool) -> void:
-	var nodes = [p1_health_bg, p2_health_bg, p1_health_border, p2_health_border, p1_health_bar, p2_health_bar, p1_health_label, p2_health_label, p1_name_label, p2_name_label, timer_label]
+	var nodes = [
+		impact_flash,
+		p1_health_bg, p2_health_bg,
+		p1_health_border, p2_health_border,
+		p1_health_lag_bar, p2_health_lag_bar,
+		p1_health_bar, p2_health_bar,
+		p1_health_label, p2_health_label,
+		p1_name_label, p2_name_label,
+		timer_label,
+	]
 	for node in nodes:
 		if node:
 			node.visible = vis
@@ -687,6 +866,14 @@ func _create_hud() -> void:
 	# so it's always visible at screen coordinates, not world coordinates.
 	# This matches the JS approach where HUD draws on the canvas directly.
 
+	impact_flash = ColorRect.new()
+	impact_flash.position = Vector2.ZERO
+	impact_flash.size = Vector2(SCREEN_WIDTH, 288)
+	impact_flash.color = Color(1.0, 1.0, 1.0, 0.0)
+	impact_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	impact_flash.visible = false
+	add_child(impact_flash)
+
 	# Health bar backgrounds
 	p1_health_bg = ColorRect.new()
 	p1_health_bg.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
@@ -715,6 +902,18 @@ func _create_hud() -> void:
 	move_child(p2_health_border, p2_health_bg.get_index())
 
 	# Health bar fills
+	p1_health_lag_bar = ColorRect.new()
+	p1_health_lag_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
+	p1_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
+	p1_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	add_child(p1_health_lag_bar)
+
+	p2_health_lag_bar = ColorRect.new()
+	p2_health_lag_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
+	p2_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
+	p2_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	add_child(p2_health_lag_bar)
+
 	p1_health_bar = ColorRect.new()
 	p1_health_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
@@ -762,6 +961,9 @@ func _create_hud() -> void:
 	timer_label.add_theme_color_override("font_color", Color.YELLOW)
 	add_child(timer_label)
 
+	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
+	p2_display_health = p2.MAX_HEALTH if p2 else 1000.0
+
 	for i in range(ROUNDS_TO_WIN):
 		var p1_dot := ColorRect.new()
 		p1_dot.position = Vector2(HUD_P1_BAR_X + float(i) * HUD_DOT_SPACING, HUD_DOT_Y)
@@ -791,16 +993,23 @@ func _update_hud() -> void:
 	if not p1 or not p2:
 		return
 
+	p1_display_health = maxf(float(p1.health), move_toward(p1_display_health, float(p1.health), HEALTH_LAG_SPEED * get_process_delta_time()))
+	p2_display_health = maxf(float(p2.health), move_toward(p2_display_health, float(p2.health), HEALTH_LAG_SPEED * get_process_delta_time()))
+
 	# P1 health bar (fills left to right)
 	var p1_ratio: float = float(p1.health) / float(p1.MAX_HEALTH)
+	var p1_lag_ratio: float = p1_display_health / float(p1.MAX_HEALTH)
+	p1_health_lag_bar.size.x = HUD_BAR_WIDTH * p1_lag_ratio
 	p1_health_bar.size.x = HUD_BAR_WIDTH * p1_ratio
 	p1_health_bar.color = _health_color(p1_ratio)
 	p1_health_label.text = "P1: %d" % p1.health
 
-	# P2 health bar (fills right to left — standard fighting game convention)
-	var p2_ratio: float = float(p2.health) / float(p2.MAX_HEALTH)
-	p2_health_bar.size.x = HUD_BAR_WIDTH * p2_ratio
 	# P2 bar anchors from the right
+	var p2_ratio: float = float(p2.health) / float(p2.MAX_HEALTH)
+	var p2_lag_ratio: float = p2_display_health / float(p2.MAX_HEALTH)
+	p2_health_lag_bar.size.x = HUD_BAR_WIDTH * p2_lag_ratio
+	p2_health_lag_bar.position.x = HUD_P2_BAR_X + HUD_BAR_WIDTH * (1.0 - p2_lag_ratio)
+	p2_health_bar.size.x = HUD_BAR_WIDTH * p2_ratio
 	p2_health_bar.position.x = HUD_P2_BAR_X + HUD_BAR_WIDTH * (1.0 - p2_ratio)
 	p2_health_bar.color = _health_color(p2_ratio)
 	p2_health_label.text = "P2: %d" % p2.health
@@ -840,6 +1049,7 @@ func _update_debug_label() -> void:
 	if not debug_label:
 		return
 	var lines: Array[String] = []
+	lines.append("App=%s game_view=%s menu=%d fighter=%d" % [AppState.keys()[app_state], str(game_view.visible) if game_view else "null", menu_index, fighter_select_index])
 	if p1:
 		var sprite1 := p1.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
 		lines.append("Round=%d %s T=%.0f P1w=%d P2w=%d" % [current_round, RoundState.keys()[round_state], round_time_left, p1_round_wins, p2_round_wins])

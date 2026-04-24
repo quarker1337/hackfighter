@@ -13,8 +13,16 @@ static func build_character_frames(character_name: String) -> SpriteFrames:
 
 static func build_teknium_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
-	var idle_tex := load("res://assets/real/characters/teknium/Teknium_Idle_V1-Sheet.png") as Texture2D
-	var walk_tex := load("res://assets/real/characters/teknium/Teknium_Walking_V1-Sheet.png") as Texture2D
+	var idle_tex := load("res://assets/real/characters/teknium/Teknium_Idle_V2-Sheet.png") as Texture2D
+	var walk_tex := load("res://assets/real/characters/teknium/Teknium_Walking_V2-Sheet.png") as Texture2D
+	var crouch_tex := load("res://assets/real/characters/teknium/Teknium_Crouch_V1-Sheet.png") as Texture2D
+	var jump_tex := load("res://assets/real/characters/teknium/Teknium_Jump_V2-Sheet.png") as Texture2D
+	var lightkick_tex := load("res://assets/real/characters/teknium/Teknium_Lightkick_V2-Sheet.png") as Texture2D
+	var heavypunch_tex := load("res://assets/real/characters/teknium/Teknium_Heavy_punch_V1-Sheet.png") as Texture2D
+	var heavykick_tex := load("res://assets/real/characters/teknium/Teknium_High_Kick_V1-Sheet.png") as Texture2D
+	var victory_tex := load("res://assets/real/characters/teknium/Teknium_Victory_V1-Sheet.png") as Texture2D
+	var hurt_tex := load("res://assets/real/characters/teknium/Teknium_Hurt_V3-Sheet.png") as Texture2D
+	var ko_tex := load("res://assets/real/characters/teknium/Teknium_KO_V1-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
 		push_warning("SpriteLoader: Teknium sheets missing, falling back to Prototype")
 		return build_prototype_frames()
@@ -22,18 +30,45 @@ static func build_teknium_frames() -> SpriteFrames:
 	_add_sheet_animation(frames, "idle", idle_tex, 8, 60.0 / 8.0, true)
 	_add_sheet_animation(frames, "walking", walk_tex, 6, 60.0 / 6.0, true)
 
-	# Placeholder mappings until the rest of Teknium's move set arrives.
-	_add_single_frame_anim_from_sheet(frames, "jump", idle_tex, 0, 8, 60.0 / 5.0)
-	_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 1, 8, 60.0 / 4.0)
-	_add_single_frame_anim_from_sheet(frames, "lightpunch", idle_tex, 2, 8, 60.0 / 4.0)
-	_add_single_frame_anim_from_sheet(frames, "heavypunch", idle_tex, 3, 8, 60.0 / 5.0)
-	_add_single_frame_anim_from_sheet(frames, "lightkick", idle_tex, 4, 8, 60.0 / 4.0)
-	_add_single_frame_anim_from_sheet(frames, "heavykick", idle_tex, 5, 8, 60.0 / 5.0)
-	_add_single_frame_anim_from_sheet(frames, "victory", idle_tex, 6, 8, 60.0 / 8.0)
-	_add_single_frame_anim_from_sheet(frames, "abdomen_hit", idle_tex, 7, 8, 60.0 / 6.0)
-	_add_single_frame_anim_from_sheet(frames, "head_hit", idle_tex, 7, 8, 60.0 / 6.0)
+	if jump_tex:
+		_add_sheet_animation(frames, "jump", jump_tex, 2, 60.0 / 5.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "jump", idle_tex, 0, 8, 60.0 / 5.0)
+	if crouch_tex:
+		_add_sheet_animation(frames, "crouching", crouch_tex, 6, 60.0 / 4.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 1, 8, 60.0 / 4.0)
+	_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 8, 60.0 / 4.0, false)
+	if heavypunch_tex:
+		_add_sheet_animation(frames, "heavypunch", heavypunch_tex, 6, 18.0, false)
+	else:
+		_add_sheet_range_animation(frames, "heavypunch", idle_tex, 2, 3, 8, 60.0 / 5.0, false)
+	if lightkick_tex:
+		_add_sheet_animation(frames, "lightkick", lightkick_tex, 8, 36.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "lightkick", idle_tex, 4, 8, 60.0 / 4.0)
+	if heavykick_tex:
+		_add_sheet_animation(frames, "heavykick", heavykick_tex, 8, 19.2, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "heavykick", idle_tex, 5, 8, 60.0 / 5.0)
+	if victory_tex:
+		_add_sheet_range_animation(frames, "victory", victory_tex, 0, 4, 11, 60.0 / 8.0, false)
+		_add_sheet_range_animation(frames, "victory_loop", victory_tex, 4, 7, 11, 60.0 / 8.0, true)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "victory", idle_tex, 6, 8, 60.0 / 8.0)
+	if hurt_tex:
+		_add_sheet_animation(frames, "abdomen_hit", hurt_tex, 4, 60.0 / 4.0, false)
+		_add_sheet_animation(frames, "head_hit", hurt_tex, 4, 60.0 / 4.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "abdomen_hit", idle_tex, 7, 8, 60.0 / 6.0)
+		_add_single_frame_anim_from_sheet(frames, "head_hit", idle_tex, 7, 8, 60.0 / 6.0)
+	if ko_tex:
+		_add_sheet_animation(frames, "ko", ko_tex, 8, 60.0 / 6.0, false)
 	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 8, 60.0 / 6.0)
-	_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 1, 8, 60.0 / 6.0)
+	if crouch_tex:
+		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 1, 8, 60.0 / 6.0)
 	return frames
 
 static func _add_sheet_animation(frames: SpriteFrames, anim_name: String, sheet: Texture2D, frame_count: int, speed: float, loop: bool) -> void:
@@ -58,6 +93,18 @@ static func _add_single_frame_anim_from_sheet(frames: SpriteFrames, anim_name: S
 	atlas.atlas = sheet
 	atlas.region = Rect2(frame_idx * frame_w, 0, frame_w, frame_h)
 	frames.add_frame(anim_name, atlas)
+
+static func _add_sheet_range_animation(frames: SpriteFrames, anim_name: String, sheet: Texture2D, start_idx: int, num_frames: int, frame_count: int, speed: float, loop: bool) -> void:
+	frames.add_animation(anim_name)
+	frames.set_animation_speed(anim_name, speed)
+	frames.set_animation_loop(anim_name, loop)
+	var frame_w := int(sheet.get_width() / frame_count)
+	var frame_h := int(sheet.get_height())
+	for i in range(num_frames):
+		var atlas := AtlasTexture.new()
+		atlas.atlas = sheet
+		atlas.region = Rect2((start_idx + i) * frame_w, 0, frame_w, frame_h)
+		frames.add_frame(anim_name, atlas)
 
 static func build_prototype_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
