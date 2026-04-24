@@ -139,9 +139,9 @@ func _ready() -> void:
 	_create_menu_ui()
 	_enter_menu()
 
-	# Keep debug overlay visible during diagnosis
+	# Show debug info briefly on boot
 	if debug_label:
-		debug_timer = 0.0
+		debug_timer = 3.0
 		debug_label.visible = true
 
 func _process(delta: float) -> void:
@@ -690,7 +690,7 @@ func _update_menu_ui() -> void:
 	match app_state:
 		AppState.MENU:
 			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-			menu_title_label.text = "HACKFIGHTER SYNC 1777016001"
+			menu_title_label.text = "HACKFIGHTER"
 			var items := ["START SIMULATION", "CONTROL MAP", "SYSTEM OPTIONS"]
 			var lines: Array[String] = []
 			for i in range(items.size()):
@@ -1073,5 +1073,5 @@ func _update_debug_label() -> void:
 		var left_bound := p1.stage_left_bound if p1 else -1.0
 		var right_bound := p1.stage_right_bound if p1 else -1.0
 		lines.append("Cam x=%.1f left=%.1f/%.1f bounds=%.0f..%.0f" % [camera.position.x, stage.get_camera_left(), stage.get_max_scroll(), left_bound, right_bound])
-	debug_label.visible = true
+	debug_label.visible = debug_timer > 0.0
 	debug_label.text = "\n".join(lines)
