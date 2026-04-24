@@ -275,8 +275,13 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		SoundManager.play_hit_sound(attacker.current_attack)
 		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick"
 		var fatal_hit := defender.health <= 0
-		_spawn_hit_fx(_impact_position(attacker, defender), false, heavy_hit or fatal_hit)
-		if heavy_hit:
+		var impact_pos := _impact_position(attacker, defender)
+		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit)
+		if fatal_hit:
+			_spawn_hit_fx(impact_pos + Vector2(push_dir * -8.0, -10.0), false, true)
+			_trigger_camera_shake(0.26, 7.0)
+			_trigger_impact_flash(Color(1.0, 0.98, 0.92, 1.0), 0.22)
+		elif heavy_hit:
 			_trigger_camera_shake(0.18, 5.0 if attacker.current_attack == "heavyKick" else 4.0)
 			_trigger_impact_flash(Color(1.0, 0.96, 0.90, 1.0), 0.16)
 		else:
