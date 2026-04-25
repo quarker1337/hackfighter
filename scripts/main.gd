@@ -47,7 +47,7 @@ var hud_layer: CanvasLayer = null
 var hud_root: Control = null
 var p1_health_widget: Control = null
 var p2_health_widget: Control = null
-var timer_bg: TextureRect = null
+var timer_bg: NinePatchRect = null
 var timer_label: Label = null
 var timer_word_label: Label = null
 var announcement_label: Label = null
@@ -815,7 +815,7 @@ func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
 		impact_flash,
 		p1_health_widget, p2_health_widget,
-		timer_bg, timer_label, timer_word_label,
+		timer_bg, timer_label,
 	]
 	for node in nodes:
 		if node:
@@ -952,33 +952,41 @@ func _create_hud() -> void:
 	p2_health_widget.slot = "AI"
 	_ui_add_child(p2_health_widget)
 
-	timer_bg = TextureRect.new()
-	timer_bg.texture = load("res://assets/ui/timer_frame.png")
-	timer_bg.position = Vector2(220, 7)
-	timer_bg.size = Vector2(72, 56)
-	timer_bg.modulate = Color(0.30, 1.25, 1.12)
-	timer_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	timer_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	timer_bg = NinePatchRect.new()
+	timer_bg.texture = load("res://assets/ui/countdown_timer.png")
+	# Same scaling method as the approved healthbar outline: keep the raw
+	# high-source art, use a sized NinePatchRect, and zero all patch margins so
+	# Godot scales the authored image as one complete piece instead of reserving
+	# or rendering at source dimensions.
+	timer_bg.position = Vector2(224, 6)
+	timer_bg.size = Vector2(64, 29)
+	timer_bg.custom_minimum_size = Vector2.ZERO
+	timer_bg.patch_margin_left = 0
+	timer_bg.patch_margin_top = 0
+	timer_bg.patch_margin_right = 0
+	timer_bg.patch_margin_bottom = 0
+	timer_bg.modulate = Color.WHITE
 	timer_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	_ui_add_child(timer_bg)
 
 	timer_label = Label.new()
-	timer_label.position = Vector2(232, 13)
-	timer_label.size = Vector2(48, 24)
+	timer_label.position = Vector2(237, 9)
+	timer_label.size = Vector2(40, 18)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	timer_label.add_theme_font_override("font", HUD_FONT)
-	timer_label.add_theme_font_size_override("font_size", 18)
-	timer_label.add_theme_color_override("font_color", Color(0.34, 1.25, 1.05))
+	timer_label.add_theme_font_size_override("font_size", 13)
+	timer_label.add_theme_color_override("font_color", Color(0.62, 1.35, 1.14))
+	timer_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.05, 0.07, 0.95))
+	timer_label.add_theme_constant_override("shadow_offset_x", 1)
+	timer_label.add_theme_constant_override("shadow_offset_y", 1)
 	_ui_add_child(timer_label)
 
 	timer_word_label = Label.new()
-	timer_word_label.position = Vector2(232, 36)
-	timer_word_label.size = Vector2(48, 12)
-	timer_word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_word_label.text = "TIME"
-	timer_word_label.add_theme_font_override("font", HUD_FONT)
-	timer_word_label.add_theme_font_size_override("font_size", 8)
-	timer_word_label.add_theme_color_override("font_color", Color(0.70, 0.96, 1.0))
+	# The replacement frame is already labeled by its shape/details; hide the old
+	# TIME caption so the hollow center stays dedicated to the countdown digits.
+	timer_word_label.visible = false
+	timer_word_label.text = ""
 	_ui_add_child(timer_word_label)
 
 	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
@@ -1059,11 +1067,11 @@ func _update_hud() -> void:
 
 	timer_label.text = "%02d" % int(ceil(round_time_left))
 	if round_time_left <= 10.0 and not intro_active:
-		timer_label.add_theme_color_override("font_color", Color(1.25, 0.34, 0.40))
-		timer_bg.modulate = Color(1.25, 0.34, 0.40)
+		timer_label.add_theme_color_override("font_color", Color(1.35, 0.38, 0.54))
+		timer_bg.modulate = Color(1.06, 0.78, 0.90, 1.0)
 	else:
-		timer_label.add_theme_color_override("font_color", Color(0.34, 1.25, 1.05))
-		timer_bg.modulate = Color(0.30, 1.25, 1.12)
+		timer_label.add_theme_color_override("font_color", Color(0.62, 1.35, 1.14))
+		timer_bg.modulate = Color.WHITE
 	if intro_active:
 		timer_label.modulate.a = 0.7
 		timer_word_label.modulate.a = 0.7
