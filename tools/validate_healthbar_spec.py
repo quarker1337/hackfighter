@@ -54,9 +54,12 @@ required_health = [
     '"LOBSTER"', '"NOUSGIRL"', '"TEKNIUM"',
     'healthbar_fill.gdshader',
     'BAR_HEIGHT: float = 27.0', 'PORTRAIT_WIDTH: float = 54.0', 'PORTRAIT_HEIGHT: float = 54.0',
-    'FILL_INSET_X: float = 4.0',
+    'P1_FILL_X: float = 5.0', 'P1_FILL_WIDTH: float = 157.0', 'P2_FILL_X: float = 1.0', 'P2_FILL_WIDTH: float = 157.0',
+    'PORTRAIT_OUTWARD_OFFSET: float = 7.0', 'portrait.position = Vector2(-PORTRAIT_OUTWARD_OFFSET, 3)', 'BAR_WIDTH - PORTRAIT_OVERLAP + PORTRAIT_OUTWARD_OFFSET',
+    'FILL_INSET_Y: float = 6.0', 'FILL_HEIGHT: float = 14.0',
+    'P1 extends the front left', 'P2 pulls the left/back edge in',
     'fill_clip.size.x', 'tween_property(fill_clip, "size:x"',
-    'target_x = FILL_INSET_X + (_full_width - target_w)',
+    'target_x = _fill_x + (_full_width - target_w)',
     'STRETCH_KEEP_ASPECT_COVERED', 'portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR',
     'teknium_portrait.png', 'lobster_portrait.png', 'nousgirl_portrait.png',
     'fill.texture = track.texture',
@@ -71,10 +74,12 @@ required_scene = [
     '[node name="PortraitRing" type="TextureRect"',
     '[node name="NameLabel" type="Label"',
     '[node name="Fill" type="NinePatchRect"',
-    'patch_margin_left = 8',
+    'patch_margin_left = 0',
     'z_index = 2',
     'offset_top = 1.0',
     'offset_bottom = 57.0',
+    'offset_left = -7.0',
+    'offset_right = 47.0',
     'stretch_mode = 6',
 ]
 missing_scene = [s for s in required_scene if s not in scene]
@@ -102,10 +107,10 @@ if 'Color(1, 1, 0' in scene or 'FFFF00' in scene or 'FFEC27' in scene:
 
 bad_sizes = []
 expected_sizes = {
-    'assets/ui/healthbar_track.png': (164, 27),
-    'assets/ui/healthbar_outline.png': (164, 27),
+    'assets/ui/healthbar_track.png': (369, 40),
+    'assets/ui/healthbar_outline.png': (457, 78),
     'assets/ui/portrait_ring.png': (224, 160),
-    'assets/ui/hero_profile.png': (75, 75),
+    'assets/ui/hero_profile.png': (151, 152),
     'assets/ui/timer_frame.png': (72, 56),
     'art/portraits/teknium_portrait.png': (192, 192),
     'art/portraits/lobster_portrait.png': (192, 192),

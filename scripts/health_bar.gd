@@ -22,17 +22,22 @@ const SIDE_P2_LABEL := Color("#FFC2E0")
 # so this keeps the round-3 proportions at the actual viewport scale.
 const BAR_WIDTH: float = 164.0
 const BAR_HEIGHT: float = 27.0
-const FILL_INSET_X: float = 4.0
-const FILL_INSET_Y: float = 4.0
-const FILL_HEIGHT: float = 19.0
+const P1_FILL_X: float = 5.0
+const P1_FILL_WIDTH: float = 157.0
+const P2_FILL_X: float = 1.0
+const P2_FILL_WIDTH: float = 157.0
+const FILL_INSET_Y: float = 6.0
+const FILL_HEIGHT: float = 14.0
 const PORTRAIT_WIDTH: float = 54.0
 const PORTRAIT_HEIGHT: float = 54.0
 const PORTRAIT_OVERLAP: float = 6.0
+const PORTRAIT_OUTWARD_OFFSET: float = 7.0
 const LABEL_HEIGHT: float = 12.0
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
 
 var _current_health: int
-var _full_width: float = BAR_WIDTH - (FILL_INSET_X * 2.0)
+var _full_width: float = P1_FILL_WIDTH
+var _fill_x: float = P1_FILL_X
 var _accent: Color = SIDE_P1_ACCENT
 
 func _ready() -> void:
@@ -56,15 +61,34 @@ func configure(new_hero_name: String, new_slot: String) -> void:
 func _configure_layout() -> void:
 	name_label.text = "%s — %s" % [slot, hero_name]
 	bar.size = Vector2(BAR_WIDTH, BAR_HEIGHT)
-	track.size = Vector2(BAR_WIDTH, BAR_HEIGHT)
+	# Slot-specific X tuning from visual review:
+	# P1 extends the front left while pulling the back/end in after visual review.
+	# P2 pulls the left/back edge in from overshoot while extending the right/front edge slightly.
+	if slot == "P1":
+		_fill_x = P1_FILL_X
+		_full_width = P1_FILL_WIDTH
+	else:
+		_fill_x = P2_FILL_X
+		_full_width = P2_FILL_WIDTH
+	track.position = Vector2(_fill_x, FILL_INSET_Y)
+	track.size = Vector2(_full_width, FILL_HEIGHT)
+	track.patch_margin_left = 0
+	track.patch_margin_top = 0
+	track.patch_margin_right = 0
+	track.patch_margin_bottom = 0
 	outline.size = Vector2(BAR_WIDTH, BAR_HEIGHT)
-	_full_width = BAR_WIDTH - (FILL_INSET_X * 2.0)
+	# The uploaded 457x78 outline is complete authored bar art, not a 9-slice skin.
+	# Preserve it by scaling the whole image; old 8px ninepatch margins visually cut/compressed the caps.
+	outline.patch_margin_left = 0
+	outline.patch_margin_top = 0
+	outline.patch_margin_right = 0
+	outline.patch_margin_bottom = 0
 	fill.size = Vector2(_full_width, FILL_HEIGHT)
 	fill.position = Vector2.ZERO
-	fill.patch_margin_left = 8
-	fill.patch_margin_top = 8
-	fill.patch_margin_right = 8
-	fill.patch_margin_bottom = 8
+	fill.patch_margin_left = 0
+	fill.patch_margin_top = 0
+	fill.patch_margin_right = 0
+	fill.patch_margin_bottom = 0
 	fill_clip.size = Vector2(_full_width, FILL_HEIGHT)
 	portrait.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	portrait_ring.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
@@ -73,10 +97,10 @@ func _configure_layout() -> void:
 	fill_clip.anchor_bottom = 0.0
 	fill_clip.anchor_left = 0.0
 	fill_clip.anchor_right = 0.0
-	fill_clip.position = Vector2(FILL_INSET_X, FILL_INSET_Y)
+	fill_clip.position = Vector2(_fill_x, FILL_INSET_Y)
 
 	if slot == "P1":
-		portrait.position = Vector2(0, 3)
+		portrait.position = Vector2(-PORTRAIT_OUTWARD_OFFSET, 3)
 		portrait_ring.position = portrait.position
 		bar.position = Vector2(PORTRAIT_WIDTH - PORTRAIT_OVERLAP, 16)
 		name_label.position = Vector2(PORTRAIT_WIDTH + 2, 1)
@@ -84,7 +108,7 @@ func _configure_layout() -> void:
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	else:
 		bar.position = Vector2(0, 16)
-		portrait.position = Vector2(BAR_WIDTH - PORTRAIT_OVERLAP, 3)
+		portrait.position = Vector2(BAR_WIDTH - PORTRAIT_OVERLAP + PORTRAIT_OUTWARD_OFFSET, 3)
 		portrait_ring.position = portrait.position
 		name_label.position = Vector2(4, 1)
 		name_label.size = Vector2(BAR_WIDTH - 12, LABEL_HEIGHT)
@@ -139,9 +163,9 @@ func set_health(value: int, animated: bool = true) -> void:
 	_current_health = value
 	var ratio := float(value) / float(max_health)
 	var target_w := _full_width * ratio
-	var target_x := FILL_INSET_X
+	var target_x := _fill_x
 	if slot != "P1":
-		target_x = FILL_INSET_X + (_full_width - target_w)
+		target_x = _fill_x + (_full_width - target_w)
 	if animated and is_inside_tree():
 		var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
 		tw.tween_property(fill_clip, "size:x", target_w, 0.20)
