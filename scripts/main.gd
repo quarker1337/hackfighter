@@ -110,6 +110,8 @@ const CAMERA_SHAKE_DECAY: float = 10.0
 const IMPACT_FLASH_DECAY: float = 8.0
 
 var debug_timer := 0.0
+var debug_ui_enabled := false
+var debug_toggle_latch := false
 var p1_display_health: float = 1000.0
 var p2_display_health: float = 1000.0
 var camera_shake_timer: float = 0.0
@@ -150,11 +152,10 @@ func _ready() -> void:
 	_enter_menu()
 
 	# No normal player-facing debug spam by default
-	if debug_label:
-		debug_timer = 0.0
-		debug_label.visible = false
+	_set_debug_ui_enabled(false)
 
 func _process(delta: float) -> void:
+	_handle_debug_toggle()
 	_update_camera_fx(delta)
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
@@ -783,6 +784,8 @@ func _animate_menu_ui() -> void:
 func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
 		impact_flash,
+		p1_hud_panel, p2_hud_panel,
+		timer_bg, timer_border,
 		p1_health_bg, p2_health_bg,
 		p1_health_border, p2_health_border,
 		p1_health_lag_bar, p2_health_lag_bar,
@@ -919,16 +922,29 @@ func _create_hud() -> void:
 	impact_flash.visible = false
 	add_child(impact_flash)
 
+	# Health bar modules
+	p1_hud_panel = ColorRect.new()
+	p1_hud_panel.position = Vector2(HUD_P1_BAR_X - 10, HUD_BAR_Y - 8)
+	p1_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
+	p1_hud_panel.color = Color(0.03, 0.06, 0.09, 0.90)
+	add_child(p1_hud_panel)
+
+	p2_hud_panel = ColorRect.new()
+	p2_hud_panel.position = Vector2(HUD_P2_BAR_X - 10, HUD_BAR_Y - 8)
+	p2_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
+	p2_hud_panel.color = Color(0.03, 0.06, 0.09, 0.90)
+	add_child(p2_hud_panel)
+
 	# Health bar backgrounds
 	p1_health_bg = ColorRect.new()
 	p1_health_bg.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bg.color = Color(0.25, 0.25, 0.25)
+	p1_health_bg.color = Color(0.08, 0.12, 0.16)
 	add_child(p1_health_bg)
 	p1_health_border = ColorRect.new()
-	p1_health_border.position = Vector2(HUD_P1_BAR_X - 1, HUD_BAR_Y - 1)
-	p1_health_border.size = Vector2(HUD_BAR_WIDTH + 2, HUD_BAR_HEIGHT + 2)
-	p1_health_border.color = Color(0.7, 0.7, 0.7)
+	p1_health_border.position = Vector2(HUD_P1_BAR_X - 2, HUD_BAR_Y - 2)
+	p1_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
+	p1_health_border.color = Color(0.0, 0.92, 0.82)
 	p1_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(p1_health_border)
 	move_child(p1_health_border, p1_health_bg.get_index())
@@ -936,12 +952,12 @@ func _create_hud() -> void:
 	p2_health_bg = ColorRect.new()
 	p2_health_bg.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bg.color = Color(0.25, 0.25, 0.25)
+	p2_health_bg.color = Color(0.08, 0.12, 0.16)
 	add_child(p2_health_bg)
 	p2_health_border = ColorRect.new()
-	p2_health_border.position = Vector2(HUD_P2_BAR_X - 1, HUD_BAR_Y - 1)
-	p2_health_border.size = Vector2(HUD_BAR_WIDTH + 2, HUD_BAR_HEIGHT + 2)
-	p2_health_border.color = Color(0.7, 0.7, 0.7)
+	p2_health_border.position = Vector2(HUD_P2_BAR_X - 2, HUD_BAR_Y - 2)
+	p2_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
+	p2_health_border.color = Color(0.0, 0.92, 0.82)
 	p2_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(p2_health_border)
 	move_child(p2_health_border, p2_health_bg.get_index())
@@ -950,60 +966,72 @@ func _create_hud() -> void:
 	p1_health_lag_bar = ColorRect.new()
 	p1_health_lag_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	p1_health_lag_bar.color = Color(1.0, 0.56, 0.20)
 	add_child(p1_health_lag_bar)
 
 	p2_health_lag_bar = ColorRect.new()
 	p2_health_lag_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_lag_bar.color = Color(1.0, 0.72, 0.22)
+	p2_health_lag_bar.color = Color(1.0, 0.56, 0.20)
 	add_child(p2_health_lag_bar)
 
 	p1_health_bar = ColorRect.new()
 	p1_health_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
 	p1_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bar.color = Color.GREEN
+	p1_health_bar.color = Color(0.18, 1.0, 0.78)
 	add_child(p1_health_bar)
 
 	p2_health_bar = ColorRect.new()
 	p2_health_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
 	p2_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bar.color = Color.GREEN
+	p2_health_bar.color = Color(0.18, 1.0, 0.78)
 	add_child(p2_health_bar)
 
 	# Health text labels
 	p1_name_label = Label.new()
-	p1_name_label.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
-	p1_name_label.add_theme_font_size_override("font_size", 10)
-	p1_name_label.add_theme_color_override("font_color", Color.WHITE)
+	p1_name_label.position = Vector2(HUD_P1_BAR_X + 2, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
+	p1_name_label.add_theme_font_size_override("font_size", 11)
+	p1_name_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 	p1_name_label.text = "OLD_PROTOTYPE_FIGHTER"
 	add_child(p1_name_label)
 
 	p2_name_label = Label.new()
-	p2_name_label.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - 22, HUD_BAR_Y + HUD_BAR_HEIGHT + 2)
-	p2_name_label.add_theme_font_size_override("font_size", 10)
-	p2_name_label.add_theme_color_override("font_color", Color.WHITE)
+	p2_name_label.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - 48, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
+	p2_name_label.add_theme_font_size_override("font_size", 11)
+	p2_name_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 	p2_name_label.text = "OLD_PROTOTYPE_FIGHTER"
 	add_child(p2_name_label)
 
 	p1_health_label = Label.new()
-	p1_health_label.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 14)
+	p1_health_label.position = Vector2(HUD_P1_BAR_X + HUD_BAR_WIDTH - 56, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
 	p1_health_label.add_theme_font_size_override("font_size", 10)
-	p1_health_label.add_theme_color_override("font_color", Color.WHITE)
+	p1_health_label.add_theme_color_override("font_color", Color(0.38, 0.96, 0.88))
 	add_child(p1_health_label)
 
 	p2_health_label = Label.new()
-	p2_health_label.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y + HUD_BAR_HEIGHT + 14)
+	p2_health_label.position = Vector2(HUD_P2_BAR_X + 4, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
 	p2_health_label.add_theme_font_size_override("font_size", 10)
-	p2_health_label.add_theme_color_override("font_color", Color.WHITE)
+	p2_health_label.add_theme_color_override("font_color", Color(0.38, 0.96, 0.88))
 	add_child(p2_health_label)
 
+	timer_border = ColorRect.new()
+	timer_border.position = Vector2(HUD_TIMER_X - 12, HUD_TIMER_Y - 6)
+	timer_border.size = Vector2(52, 32)
+	timer_border.color = Color(0.0, 0.92, 0.82)
+	add_child(timer_border)
+
+	timer_bg = ColorRect.new()
+	timer_bg.position = Vector2(HUD_TIMER_X - 10, HUD_TIMER_Y - 4)
+	timer_bg.size = Vector2(48, 28)
+	timer_bg.color = Color(0.04, 0.07, 0.10, 0.96)
+	add_child(timer_bg)
+
 	timer_label = Label.new()
-	timer_label.position = Vector2(HUD_TIMER_X, HUD_TIMER_Y)
-	timer_label.size = Vector2(28, 20)
+	timer_label.position = Vector2(HUD_TIMER_X - 2, HUD_TIMER_Y - 1)
+	timer_label.size = Vector2(32, 22)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.add_theme_font_size_override("font_size", 14)
-	timer_label.add_theme_color_override("font_color", Color.YELLOW)
+	timer_label.add_theme_font_size_override("font_size", 16)
+	timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
 	add_child(timer_label)
 
 	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
@@ -1111,13 +1139,17 @@ func _update_hud() -> void:
 
 	timer_label.text = "%02d" % int(ceil(round_time_left))
 	if round_time_left <= 10.0 and not intro_active:
-		timer_label.add_theme_color_override("font_color", Color(1.0, 0.34, 0.34))
+		timer_label.add_theme_color_override("font_color", Color(1.0, 0.34, 0.40))
+		timer_border.color = Color(1.0, 0.34, 0.40)
 	else:
-		timer_label.add_theme_color_override("font_color", Color(0.28, 0.95, 0.85))
+		timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
+		timer_border.color = Color(0.0, 0.92, 0.82)
 	if intro_active:
 		timer_label.modulate.a = 0.7
+		timer_bg.modulate.a = 0.78
 	else:
 		timer_label.modulate.a = 1.0
+		timer_bg.modulate.a = 1.0
 
 func _update_round_dots() -> void:
 	for i in range(ROUNDS_TO_WIN):
@@ -1168,5 +1200,21 @@ func _update_debug_label() -> void:
 		var left_bound := p1.stage_left_bound if p1 else -1.0
 		var right_bound := p1.stage_right_bound if p1 else -1.0
 		lines.append("Cam x=%.1f left=%.1f/%.1f bounds=%.0f..%.0f" % [camera.position.x, stage.get_camera_left(), stage.get_max_scroll(), left_bound, right_bound])
-	debug_label.visible = debug_timer > 0.0
+	debug_label.visible = debug_ui_enabled or debug_timer > 0.0
 	debug_label.text = "\n".join(lines)
+
+func _handle_debug_toggle() -> void:
+	var pressed := Input.is_physical_key_pressed(KEY_F9)
+	if pressed and not debug_toggle_latch:
+		_set_debug_ui_enabled(not debug_ui_enabled)
+	debug_toggle_latch = pressed
+
+func _set_debug_ui_enabled(enabled: bool) -> void:
+	debug_ui_enabled = enabled
+	debug_timer = 0.0
+	if debug_label:
+		debug_label.visible = enabled
+	if p1 and p1.has_method("set_debug_overlay_enabled"):
+		p1.set_debug_overlay_enabled(enabled)
+	if p2 and p2.has_method("set_debug_overlay_enabled"):
+		p2.set_debug_overlay_enabled(enabled)

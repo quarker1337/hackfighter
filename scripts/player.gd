@@ -74,11 +74,14 @@ const GETTING_UP_FRAMES: int   = 20
 @export var character_name: String = "Teknium"
 @export var facing_right: bool = true
 
-const SHADOW_TEX_SIZE := Vector2i(128, 52)
-const SHADOW_FEET_OFFSET_Y := -40.0
-const SHADOW_GROUND_ALPHA := 0.72
-const SHADOW_AIR_ALPHA := 0.34
-const SHADOW_MIN_SCALE := 0.55
+const SHADOW_TEX_SIZE := Vector2i(128, 32)
+const SHADOW_FEET_OFFSET_Y := 8.0
+const SHADOW_GROUND_ALPHA := 0.0
+const SHADOW_AIR_ALPHA := 0.0
+const SHADOW_MIN_SCALE := 0.86
+const RIM_SCALE_BONUS := 1.02
+const RIM_OFFSET := Vector2(0.0, 0.0)
+const RIM_COLOR := Color(0.82, 0.96, 1.0, 0.08)
 
 # ── Public state ──────────────────────────────────────────────────────
 var health: int = MAX_HEALTH
@@ -136,9 +139,11 @@ var crouch_phase: String = ""  # "entering", "holding", "exiting"
 
 var shadow_sprite: Sprite2D = null
 var shadow_base_scale: Vector2 = Vector2.ONE
+var rim_sprite: AnimatedSprite2D = null
 
 # Debug overlay — created programmatically
 var debug_overlay: Label = null
+var debug_overlay_enabled: bool = false
 
 # ── Signals ───────────────────────────────────────────────────────────
 signal took_damage(amount: int)
@@ -147,9 +152,11 @@ signal died
 func _ready() -> void:
 	health = MAX_HEALTH
 	_create_shadow()
+	_create_rim_sprite()
 	_apply_character_visuals()
 	sprite.animation_finished.connect(_on_animation_finished)
 	_update_shadow()
+	_sync_visual_layers()
 
 	# Create in-game debug overlay — hidden by default for player-facing view
 	debug_overlay = Label.new()
@@ -163,16 +170,23 @@ func _ready() -> void:
 func _apply_character_visuals() -> void:
 	var frames := SpriteLoader.build_character_frames(character_name)
 	sprite.sprite_frames = frames
+	if rim_sprite:
+		rim_sprite.sprite_frames = frames
 	if character_name.to_lower() == "teknium":
 		sprite.scale = Vector2(0.78, 0.78)
-		shadow_base_scale = Vector2(1.0, 0.62)
+		shadow_base_scale = Vector2(1.00, 0.30)
 	else:
 		sprite.scale = Vector2(1.33333, 1.33333)
-		shadow_base_scale = Vector2(1.0, 0.62)
+		shadow_base_scale = Vector2(1.08, 0.34)
 	if shadow_sprite:
 		shadow_sprite.scale = shadow_base_scale
+	if rim_sprite:
+		rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
+		rim_sprite.position = RIM_OFFSET
+		rim_sprite.modulate = RIM_COLOR
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
 		sprite.play("idle")
+		_sync_visual_layers()
 	else:
 		push_warning("Player %d: cannot play idle animation for '%s'!" % [player_index, character_name])
 
@@ -186,11 +200,21 @@ func _create_shadow() -> void:
 	shadow_sprite = Sprite2D.new()
 	shadow_sprite.name = "ShadowSprite"
 	shadow_sprite.centered = true
-	shadow_sprite.z_index = 90
+	shadow_sprite.z_index = -20
 	shadow_sprite.texture = _build_shadow_texture()
 	shadow_sprite.position = Vector2(0.0, SHADOW_FEET_OFFSET_Y)
+	shadow_sprite.modulate = Color(0.0, 0.0, 0.0, SHADOW_GROUND_ALPHA)
 	add_child(shadow_sprite)
 	move_child(shadow_sprite, 0)
+
+func _create_rim_sprite() -> void:
+	rim_sprite = AnimatedSprite2D.new()
+	rim_sprite.name = "RimSprite"
+	rim_sprite.z_index = -5
+	rim_sprite.position = RIM_OFFSET
+	rim_sprite.modulate = RIM_COLOR
+	add_child(rim_sprite)
+	move_child(rim_sprite, sprite.get_index())
 
 func _build_shadow_texture() -> ImageTexture:
 	var image := Image.create(SHADOW_TEX_SIZE.x, SHADOW_TEX_SIZE.y, false, Image.FORMAT_RGBA8)
@@ -202,10 +226,10 @@ func _build_shadow_texture() -> ImageTexture:
 		for x in range(SHADOW_TEX_SIZE.x):
 			var dx := (float(x) - center.x) / radius_x
 			var dy := (float(y) - center.y) / radius_y
-			var dist := sqrt(dx * dx + dy * dy)
+			var dist := dx * dx + dy * dy
 			if dist >= 1.0:
 				continue
-			var alpha := pow(1.0 - dist, 1.8) * 0.82
+			var alpha := (1.0 - dist) * 0.48
 			image.set_pixel(x, y, Color(0, 0, 0, alpha))
 	return ImageTexture.create_from_image(image)
 
@@ -221,6 +245,24 @@ func _update_shadow() -> void:
 	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
 	shadow_sprite.modulate = Color(0.0, 0.0, 0.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
+func _sync_visual_layers() -> void:
+	if sprite == null:
+		return
+	sprite.flip_h = not facing_right
+	if rim_sprite == null:
+		return
+	rim_sprite.visible = sprite.visible
+	rim_sprite.sprite_frames = sprite.sprite_frames
+	rim_sprite.flip_h = sprite.flip_h
+	rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
+	rim_sprite.position = RIM_OFFSET
+	rim_sprite.modulate = RIM_COLOR
+	if sprite.sprite_frames and sprite.sprite_frames.has_animation(sprite.animation):
+		if rim_sprite.animation != sprite.animation:
+			rim_sprite.play(sprite.animation)
+		rim_sprite.frame = sprite.frame
+		rim_sprite.pause()
+
 func _physics_process(_delta: float) -> void:
 	just_landed = false
 
@@ -228,14 +270,14 @@ func _physics_process(_delta: float) -> void:
 		hitstop_frames -= 1
 		_update_shadow()
 		_update_debug_overlay()
-		sprite.flip_h = not facing_right
+		_sync_visual_layers()
 		_save_prev_ai_input()
 		return
 
 	if not control_enabled:
 		_update_shadow()
 		_update_debug_overlay()
-		sprite.flip_h = not facing_right
+		_sync_visual_layers()
 		_save_prev_ai_input()
 		return
 
@@ -249,7 +291,7 @@ func _physics_process(_delta: float) -> void:
 		_apply_pushback()
 		_update_shadow()
 		_update_debug_overlay()
-		sprite.flip_h = not facing_right
+		_sync_visual_layers()
 		_save_prev_ai_input()
 		return
 
@@ -262,7 +304,7 @@ func _physics_process(_delta: float) -> void:
 		_apply_pushback()
 		_update_shadow()
 		_update_debug_overlay()
-		sprite.flip_h = not facing_right
+		_sync_visual_layers()
 		_save_prev_ai_input()
 		return
 
@@ -276,7 +318,7 @@ func _physics_process(_delta: float) -> void:
 			_set_animation("idle")  # no "getting up" sprite, just go to idle
 		_update_shadow()
 		_update_debug_overlay()
-		sprite.flip_h = not facing_right
+		_sync_visual_layers()
 		_save_prev_ai_input()
 		return
 
@@ -407,7 +449,7 @@ func _physics_process(_delta: float) -> void:
 	_apply_pushback()
 
 	_update_debug_overlay()
-	sprite.flip_h = not facing_right
+	_sync_visual_layers()
 	_save_prev_ai_input()
 
 # ── Input helpers ─────────────────────────────────────────────────────
@@ -571,6 +613,7 @@ func _safe_play(anim_name: String) -> void:
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation(anim_name) and sprite.sprite_frames.get_frame_count(anim_name) > 0:
 		sprite.play(anim_name)
 		sprite.frame = 0
+		_sync_visual_layers()
 	else:
 		push_warning("Player %d: tried to play missing/empty animation '%s'" % [player_index, anim_name])
 
@@ -605,6 +648,11 @@ func _on_animation_finished() -> void:
 		return
 	# One-shot animations end naturally — state handles transitions
 
+func set_debug_overlay_enabled(enabled: bool) -> void:
+	debug_overlay_enabled = enabled
+	if debug_overlay:
+		debug_overlay.visible = enabled
+
 # ── Debug overlay ─────────────────────────────────────────────────────
 
 func _update_debug_overlay() -> void:
@@ -623,3 +671,4 @@ func _update_debug_overlay() -> void:
 		elif is_blocking:
 			state_str = "BLOCK:%s" % block_type
 		debug_overlay.text = "P%d hp=%d %s y=%.1f vy=%.2f anim=%s" % [player_index, health, state_str, position.y, vel_y, current_anim]
+		debug_overlay.visible = debug_overlay_enabled
