@@ -17,8 +17,13 @@ enum AppState { MENU, FIGHTER_SELECT, CONTROLS, OPTIONS, GAME }
 var app_state: AppState = AppState.MENU
 var menu_index: int = 0
 var fighter_select_index: int = 0
+var option_index: int = 0
 var option_difficulty_index: int = 1
+var option_sfx_volume: int = 60
+var option_music_volume: int = 70
+var option_radio_index: int = 0
 const CPU_DIFFICULTIES := ["EASY", "NORMAL", "HARD"]
+const OPTION_COUNT := 4
 const FIGHTER_PLACEHOLDERS := ["TEKNIUM", "NOUSGIRL", "LOBSTER"]
 var selected_fighter_name: String = "TEKNIUM"
 
@@ -152,6 +157,9 @@ func _ready() -> void:
 	_create_fx_layer()
 	_create_hud()
 	_create_menu_ui()
+	SoundManager.set_sfx_volume_percent(option_sfx_volume)
+	SoundManager.set_music_volume_percent(option_music_volume)
+	SoundManager.set_radio_channel(option_radio_index)
 	_enter_menu()
 
 	# No normal player-facing debug spam by default
@@ -209,8 +217,9 @@ func _process(delta: float) -> void:
 				round_state = RoundState.MATCH_OVER
 				if announcement_label:
 					announcement_label.visible = false
-				_show_result_panel(1 if p1_round_wins >= ROUNDS_TO_WIN else 2)
-				SoundManager.play("you_win", 0.75)
+				var match_winner := 1 if p1_round_wins >= ROUNDS_TO_WIN else 2
+				_show_result_panel(match_winner)
+				SoundManager.play_match_result(match_winner, 0.75)
 			else:
 				_start_next_round()
 	elif round_state == RoundState.MATCH_OVER:
@@ -560,6 +569,7 @@ func _enter_menu() -> void:
 	app_state = AppState.MENU
 	menu_index = 0
 	fighter_select_index = 0
+	option_index = 0
 	intro_active = false
 	intro_token += 1
 	if game_view:
@@ -607,12 +617,30 @@ func _process_menu_input() -> void:
 			if Input.is_action_just_pressed("p1_start") or Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
 		AppState.OPTIONS:
-			if Input.is_action_just_pressed("p1_left"):
-				option_difficulty_index = posmod(option_difficulty_index - 1, CPU_DIFFICULTIES.size())
+			if Input.is_action_just_pressed("p1_up"):
+				option_index = posmod(option_index - 1, OPTION_COUNT)
+			elif Input.is_action_just_pressed("p1_down"):
+				option_index = posmod(option_index + 1, OPTION_COUNT)
+			elif Input.is_action_just_pressed("p1_left"):
+				_adjust_option(-1)
 			elif Input.is_action_just_pressed("p1_right"):
-				option_difficulty_index = posmod(option_difficulty_index + 1, CPU_DIFFICULTIES.size())
+				_adjust_option(1)
 			elif Input.is_action_just_pressed("p1_start") or Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
+
+func _adjust_option(delta: int) -> void:
+	match option_index:
+		0:
+			option_difficulty_index = posmod(option_difficulty_index + delta, CPU_DIFFICULTIES.size())
+		1:
+			option_sfx_volume = clampi(option_sfx_volume + delta * 5, 0, 100)
+			SoundManager.set_sfx_volume_percent(option_sfx_volume)
+		2:
+			option_music_volume = clampi(option_music_volume + delta * 5, 0, 100)
+			SoundManager.set_music_volume_percent(option_music_volume)
+		3:
+			option_radio_index += delta
+			SoundManager.set_radio_channel(option_radio_index)
 
 func _ensure_hud_layer() -> void:
 	if hud_layer:
@@ -763,6 +791,10 @@ func _update_menu_ui() -> void:
 	if not visible:
 		return
 	menu_subtitle_label.text = "teknium // nous research // combat sandbox"
+	menu_body_label.position = Vector2(92, 102)
+	menu_body_label.size = Vector2(328, 106)
+	menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	menu_body_label.add_theme_font_size_override("font_size", 15)
 	match app_state:
 		AppState.MENU:
 			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -791,9 +823,26 @@ func _update_menu_ui() -> void:
 			menu_hint_label.text = "RETURN: ENTER OR U/J"
 		AppState.OPTIONS:
 			menu_title_label.text = "SYSTEM OPTIONS"
-			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			menu_body_label.text = "CPU PROFILE\n\n<  %s  >\n\nSelect how aggressive the rival model behaves." % CPU_DIFFICULTIES[option_difficulty_index]
-			menu_hint_label.text = "CHANGE: A/D   RETURN: ENTER OR U/J"
+			menu_body_label.position = Vector2(78, 94)
+			menu_body_label.size = Vector2(356, 122)
+			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			menu_body_label.add_theme_font_size_override("font_size", 11)
+			var radio_label := SoundManager.get_radio_channel_label()
+			if radio_label == "":
+				radio_label = "NO CHANNELS INSTALLED"
+			var option_rows := [
+				["CPU PROFILE", "< %s >" % CPU_DIFFICULTIES[option_difficulty_index]],
+				["SFX BUS", "< %d%% >" % option_sfx_volume],
+				["MUSIC BUS", "< %d%% >" % option_music_volume],
+				["RADIO CHANNEL", "< %s >" % radio_label],
+			]
+			var option_lines: Array[String] = []
+			for i in range(option_rows.size()):
+				var prefix := "[>]" if i == option_index else "[ ]"
+				option_lines.append("%-4s %-14s %s" % [prefix, option_rows[i][0], option_rows[i][1]])
+			menu_body_label.text = "\n".join(option_lines)
+			menu_hint_label.text = "NAV: W/S   CHANGE: A/D   RETURN: ENTER OR U/J"
 
 func _animate_menu_ui() -> void:
 	var pulse := 0.22 + 0.06 * sin(menu_fx_time * 1.9)
@@ -858,20 +907,14 @@ func _start_next_round(first_round: bool = false) -> void:
 	if announcement_label:
 		announcement_label.visible = true
 		announcement_label.text = "ROUND %d INITIALIZING" % current_round
-	SoundManager.play("round", 0.7)
-	await get_tree().create_timer(0.35).timeout
+	SoundManager.play_round_call(current_round, 0.75)
+	await get_tree().create_timer(1.15).timeout
 	if this_intro != intro_token:
 		return
-	match current_round:
-		1:
-			SoundManager.play("one", 0.7)
-		2:
-			SoundManager.play("two", 0.7)
-		3:
-			SoundManager.play("three", 0.7)
-		_:
-			SoundManager.play("final", 0.7)
-	await get_tree().create_timer(0.75).timeout
+	if announcement_label:
+		announcement_label.text = "READY"
+	SoundManager.play("ready", 0.75)
+	await get_tree().create_timer(0.95).timeout
 	if this_intro != intro_token:
 		return
 	if announcement_label:
