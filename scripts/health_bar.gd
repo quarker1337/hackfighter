@@ -18,6 +18,8 @@ const SIDE_P1_ACCENT := Color(0.24, 1.18, 1.06, 1.0) # #3FF6E0 with bloom headro
 const SIDE_P2_ACCENT := Color(1.28, 0.31, 0.66, 1.0) # #FF4FA8 with bloom headroom
 const SIDE_P1_LABEL := Color("#7CF7B5")
 const SIDE_P2_LABEL := Color("#FFC2E0")
+const P2_FILL_BASE := Color(1.34, 0.12, 0.62, 1.0)
+const P2_FILL_SHINE := Color(1.55, 0.58, 0.96, 1.0)
 # 420px mockup bars do not fit Hackfighter's 512px game viewport twice plus timer,
 # so this keeps the round-3 proportions at the actual viewport scale.
 const BAR_WIDTH: float = 164.0
@@ -115,15 +117,16 @@ func _configure_layout() -> void:
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 func _apply_assets() -> void:
-	track.texture = load("res://assets/ui/healthbar_track.png")
+	var suffix := "" if slot == "P1" else "_p2"
+	track.texture = load("res://assets/ui/healthbar_track%s.png" % suffix)
 	track.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	fill.texture = track.texture
 	fill.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	outline.texture = load("res://assets/ui/healthbar_outline.png")
+	outline.texture = load("res://assets/ui/healthbar_outline%s.png" % suffix)
 	outline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	portrait_ring.texture = null
 	portrait_ring.visible = false
-	portrait.texture = load("res://assets/ui/hero_profile.png")
+	portrait.texture = load("res://assets/ui/hero_profile%s.png" % suffix)
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	# UI profile art is authored higher than the logical slot so downscaling can
@@ -148,7 +151,7 @@ func _apply_side_theme() -> void:
 	name_label.add_theme_color_override("font_color", SIDE_P1_LABEL if slot == "P1" else SIDE_P2_LABEL)
 
 func _apply_hero_theme() -> void:
-	var colors := _hero_fill_colors(hero_name)
+	var colors := [P2_FILL_BASE, P2_FILL_SHINE] if slot != "P1" else _hero_fill_colors(hero_name)
 	var mat := fill.material as ShaderMaterial
 	if mat:
 		mat.set_shader_parameter("base_color", colors[0])
@@ -184,7 +187,9 @@ func _flash_and_shake() -> void:
 	var original_pos := position
 	var tw := create_tween()
 	tw.tween_property(outline, "modulate", Color(1.6, 1.6, 1.6, 1.0), 0.04)
-	tw.tween_property(outline, "modulate", _accent, 0.12)
+	# Damage flash must return to the untouched uploaded outline. Ending on _accent
+	# left a permanent red/pink tint after P2 was hit once.
+	tw.tween_property(outline, "modulate", Color.WHITE, 0.12)
 	var mat := fill.material as ShaderMaterial
 	if mat:
 		mat.set_shader_parameter("damage_flash", 1.0)
