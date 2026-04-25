@@ -15,10 +15,11 @@ checks = [
     root / 'scenes' / 'HealthBar.tscn',
     root / 'scripts' / 'health_bar.gd',
     root / 'shaders' / 'healthbar_fill.gdshader',
-    root / 'shaders' / 'circle_mask.gdshader',
+    root / 'shaders' / 'chamfer_mask.gdshader',
     root / 'assets' / 'ui' / 'healthbar_track.png',
     root / 'assets' / 'ui' / 'healthbar_outline.png',
     root / 'assets' / 'ui' / 'portrait_ring.png',
+    root / 'assets' / 'ui' / 'hero_profile.png',
     root / 'assets' / 'ui' / 'timer_frame.png',
     root / 'art' / 'portraits' / 'teknium_portrait.png',
     root / 'art' / 'portraits' / 'lobster_portrait.png',
@@ -31,6 +32,7 @@ health = (root / 'scripts' / 'health_bar.gd').read_text()
 scene = (root / 'scenes' / 'HealthBar.tscn').read_text() if (root / 'scenes' / 'HealthBar.tscn').exists() else ''
 shader = (root / 'shaders' / 'healthbar_fill.gdshader').read_text() if (root / 'shaders' / 'healthbar_fill.gdshader').exists() else ''
 main_scene = (root / 'scenes' / 'Main.tscn').read_text() if (root / 'scenes' / 'Main.tscn').exists() else ''
+project = (root / 'project.godot').read_text() if (root / 'project.godot').exists() else ''
 
 required_main = [
     'const HEALTH_BAR_SCENE',
@@ -39,7 +41,10 @@ required_main = [
     'timer_word_label.text = "TIME"',
     'timer_frame.png',
     'Vector2(8, 4)',
-    'Vector2(274, 4)',
+    'Vector2(292, 4)',
+    'CanvasLayer.new()',
+    'hud_root.add_child(node)',
+    'game_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST',
 ]
 missing_main = [s for s in required_main if s not in main]
 
@@ -47,16 +52,17 @@ required_health = [
     '"%s — %s"',
     '#3FF6E0', '#FF4FA8', '#7CF7B5', '#FFC2E0',
     '"LOBSTER"', '"NOUSGIRL"', '"TEKNIUM"',
-    'healthbar_fill.gdshader', 'circle_mask.gdshader',
-    'BAR_HEIGHT: float = 36.0', 'PORTRAIT_SIZE: float = 56.0',
-    'FILL_INSET_X: float = 6.0',
+    'healthbar_fill.gdshader',
+    'BAR_HEIGHT: float = 27.0', 'PORTRAIT_WIDTH: float = 54.0', 'PORTRAIT_HEIGHT: float = 54.0',
+    'FILL_INSET_X: float = 4.0',
     'fill_clip.size.x', 'tween_property(fill_clip, "size:x"',
     'target_x = FILL_INSET_X + (_full_width - target_w)',
-    'STRETCH_KEEP_ASPECT_COVERED', 'TEXTURE_FILTER_NEAREST',
+    'STRETCH_KEEP_ASPECT_COVERED', 'portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR',
     'teknium_portrait.png', 'lobster_portrait.png', 'nousgirl_portrait.png',
     'fill.texture = track.texture',
+    'hero_profile.png',
     'fill.position.x = -(_full_width - target_w) if slot != "P1" else 0.0',
-    'damage_flash',
+    'damage_flash', 'TEXTURE_FILTER_LINEAR',
 ]
 missing_health = [s for s in required_health if s not in health]
 
@@ -65,10 +71,10 @@ required_scene = [
     '[node name="PortraitRing" type="TextureRect"',
     '[node name="NameLabel" type="Label"',
     '[node name="Fill" type="NinePatchRect"',
-    'patch_margin_left = 18',
+    'patch_margin_left = 8',
     'z_index = 2',
-    'offset_top = -2.0',
-    'offset_bottom = 58.0',
+    'offset_top = 1.0',
+    'offset_bottom = 57.0',
     'stretch_mode = 6',
 ]
 missing_scene = [s for s in required_scene if s not in scene]
@@ -96,9 +102,10 @@ if 'Color(1, 1, 0' in scene or 'FFFF00' in scene or 'FFEC27' in scene:
 
 bad_sizes = []
 expected_sizes = {
-    'assets/ui/healthbar_track.png': (256, 48),
-    'assets/ui/healthbar_outline.png': (256, 48),
-    'assets/ui/portrait_ring.png': (192, 192),
+    'assets/ui/healthbar_track.png': (164, 27),
+    'assets/ui/healthbar_outline.png': (164, 27),
+    'assets/ui/portrait_ring.png': (224, 160),
+    'assets/ui/hero_profile.png': (75, 75),
     'assets/ui/timer_frame.png': (72, 56),
     'art/portraits/teknium_portrait.png': (192, 192),
     'art/portraits/lobster_portrait.png': (192, 192),
@@ -113,6 +120,7 @@ font_ok = any((root / 'fonts').glob('*.ttf'))
 world_env_ok = 'WorldEnvironment' in main_scene and 'glow_enabled = true' in main_scene
 hit_hook_ok = '.take_damage(' in main
 round_pips_removed = 'Color.YELLOW' not in main and 'p1_dot := ColorRect.new()' not in main and 'p2_dot := ColorRect.new()' not in main
+round4_native_hud_ok = 'window/stretch/mode="canvas_items"' in project and 'CanvasLayer.new()' in main and 'hud_root.add_child(node)' in main and '_layout_native_layers' not in main and 'game_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST' in main
 
 failures = []
 if missing: failures.append('missing files: ' + ', '.join(missing))
@@ -126,6 +134,7 @@ if not font_ok: failures.append('missing fonts/*.ttf')
 if not world_env_ok: failures.append('missing WorldEnvironment glow in Main.tscn')
 if not hit_hook_ok: failures.append('main.gd does not call HealthBar.take_damage()')
 if not round_pips_removed: failures.append('round-win pips/yellow square artifacts still present near HUD')
+if not round4_native_hud_ok: failures.append('round4 native HUD layer/stretch fix missing')
 
 if failures:
     print('healthbar spec validation FAILED')

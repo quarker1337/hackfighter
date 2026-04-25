@@ -43,6 +43,8 @@ const HITSTOP_ON_BLOCK: int = 3
 ## HealthBar.gd renders labels like P1 — TEKNIUM and AI — TEKNIUM.
 const HEALTH_BAR_SCENE := preload("res://scenes/HealthBar.tscn")
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
+var hud_layer: CanvasLayer = null
+var hud_root: Control = null
 var p1_health_widget: Control = null
 var p2_health_widget: Control = null
 var timer_bg: TextureRect = null
@@ -82,6 +84,7 @@ const CAMERA_PAN_SPEED := 6.0
 const CAMERA_Y := 144.0
 const MAX_FIGHTER_SEPARATION := 420.0
 const SCREEN_WIDTH := 512.0
+const SCREEN_HEIGHT := 288.0
 const STAGE_FLOOR_WIDTH := 682.0
 const VISIBLE_WIDTH := SCREEN_WIDTH / VIEW_ZOOM
 
@@ -136,7 +139,16 @@ func _ready() -> void:
 	camera.position_smoothing_speed = CAMERA_SMOOTHING
 	camera.make_current()
 
-	# Create HUD
+	# Keep gameplay pixel-art inside the low-res SubViewport, while the root
+	# CanvasLayer/HUDRoot can render at the higher window/canvas resolution.
+	# Do not manually resize/center it: previous manual native layout caused
+	# floating-box/ghost-render regressions.
+	if game_view:
+		game_view.stretch = true
+		game_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+
+	# Create UI/HUD layer, then HUD/menu contents.
+	_ensure_hud_layer()
 	_create_fx_layer()
 	_create_hud()
 	_create_menu_ui()
@@ -602,24 +614,45 @@ func _process_menu_input() -> void:
 			elif Input.is_action_just_pressed("p1_start") or Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
 
+func _ensure_hud_layer() -> void:
+	if hud_layer:
+		return
+	hud_layer = CanvasLayer.new()
+	hud_layer.name = "HUDLayer"
+	hud_layer.layer = 10
+	hud_layer.follow_viewport_enabled = false
+	add_child(hud_layer)
+
+	hud_root = Control.new()
+	hud_root.name = "HUD"
+	hud_root.position = Vector2.ZERO
+	hud_root.size = Vector2(SCREEN_WIDTH, SCREEN_HEIGHT)
+	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_layer.add_child(hud_root)
+
+func _ui_add_child(node: Node) -> void:
+	if not hud_root:
+		_ensure_hud_layer()
+	hud_root.add_child(node)
+
 func _create_menu_ui() -> void:
 	menu_overlay = ColorRect.new()
 	menu_overlay.position = Vector2.ZERO
 	menu_overlay.size = Vector2(SCREEN_WIDTH, 288)
 	menu_overlay.color = Color(0.01, 0.02, 0.03, 1.0)
-	add_child(menu_overlay)
+	_ui_add_child(menu_overlay)
 
 	menu_panel_back = ColorRect.new()
 	menu_panel_back.position = Vector2(56, 26)
 	menu_panel_back.size = Vector2(400, 232)
 	menu_panel_back.color = Color(0.0, 0.85, 0.72, 0.28)
-	add_child(menu_panel_back)
+	_ui_add_child(menu_panel_back)
 
 	menu_panel = ColorRect.new()
 	menu_panel.position = Vector2(58, 28)
 	menu_panel.size = Vector2(396, 228)
 	menu_panel.color = Color(0.03, 0.05, 0.08, 0.96)
-	add_child(menu_panel)
+	_ui_add_child(menu_panel)
 
 	menu_title_label = Label.new()
 	menu_title_label.position = Vector2(84, 40)
@@ -627,7 +660,7 @@ func _create_menu_ui() -> void:
 	menu_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_title_label.add_theme_font_size_override("font_size", 24)
 	menu_title_label.add_theme_color_override("font_color", Color(0.92, 0.98, 1.0))
-	add_child(menu_title_label)
+	_ui_add_child(menu_title_label)
 
 	menu_subtitle_label = Label.new()
 	menu_subtitle_label.position = Vector2(84, 68)
@@ -635,7 +668,7 @@ func _create_menu_ui() -> void:
 	menu_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_subtitle_label.add_theme_font_size_override("font_size", 11)
 	menu_subtitle_label.add_theme_color_override("font_color", Color(0.28, 0.95, 0.85))
-	add_child(menu_subtitle_label)
+	_ui_add_child(menu_subtitle_label)
 
 	menu_body_label = Label.new()
 	menu_body_label.position = Vector2(92, 102)
@@ -644,7 +677,7 @@ func _create_menu_ui() -> void:
 	menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	menu_body_label.add_theme_font_size_override("font_size", 15)
 	menu_body_label.add_theme_color_override("font_color", Color(0.86, 0.94, 0.98))
-	add_child(menu_body_label)
+	_ui_add_child(menu_body_label)
 
 	for i in range(FIGHTER_PLACEHOLDERS.size()):
 		var x := 82 + i * 116
@@ -652,14 +685,14 @@ func _create_menu_ui() -> void:
 		back.position = Vector2(x, 102)
 		back.size = Vector2(104, 86)
 		back.color = Color(0.0, 0.85, 0.72, 0.22)
-		add_child(back)
+		_ui_add_child(back)
 		fighter_card_backs.append(back)
 
 		var fill := ColorRect.new()
 		fill.position = Vector2(x + 2, 104)
 		fill.size = Vector2(100, 82)
 		fill.color = Color(0.06, 0.09, 0.13, 0.98)
-		add_child(fill)
+		_ui_add_child(fill)
 		fighter_card_fills.append(fill)
 
 		var label := Label.new()
@@ -669,7 +702,7 @@ func _create_menu_ui() -> void:
 		label.add_theme_font_size_override("font_size", 13)
 		label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 		label.text = FIGHTER_PLACEHOLDERS[i]
-		add_child(label)
+		_ui_add_child(label)
 		fighter_card_labels.append(label)
 
 		var tag := Label.new()
@@ -680,7 +713,7 @@ func _create_menu_ui() -> void:
 		tag.add_theme_font_size_override("font_size", 10)
 		tag.add_theme_color_override("font_color", Color(0.45, 0.75, 0.82))
 		tag.text = "PLACEHOLDER\nASSET SLOT"
-		add_child(tag)
+		_ui_add_child(tag)
 		fighter_card_tags.append(tag)
 
 	fighter_select_desc_label = Label.new()
@@ -689,7 +722,7 @@ func _create_menu_ui() -> void:
 	fighter_select_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	fighter_select_desc_label.add_theme_font_size_override("font_size", 10)
 	fighter_select_desc_label.add_theme_color_override("font_color", Color(0.45, 0.75, 0.82))
-	add_child(fighter_select_desc_label)
+	_ui_add_child(fighter_select_desc_label)
 
 	menu_hint_label = Label.new()
 	menu_hint_label.position = Vector2(82, 222)
@@ -697,14 +730,14 @@ func _create_menu_ui() -> void:
 	menu_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	menu_hint_label.add_theme_font_size_override("font_size", 11)
 	menu_hint_label.add_theme_color_override("font_color", Color(0.45, 0.75, 0.82))
-	add_child(menu_hint_label)
+	_ui_add_child(menu_hint_label)
 
 	for i in range(18):
 		var line := ColorRect.new()
 		line.position = Vector2(70, 34 + i * 12)
 		line.size = Vector2(372, 1)
 		line.color = Color(0.45, 0.95, 0.95, 0.06)
-		add_child(line)
+		_ui_add_child(line)
 		menu_scanlines.append(line)
 
 func _update_menu_ui() -> void:
@@ -896,9 +929,8 @@ func _finish_round(winner: int, by_ko: bool) -> void:
 # ── HUD ───────────────────────────────────────────────────────────────
 
 func _create_hud() -> void:
-	# We create HUD as children of the root Control (outside SubViewport)
-	# so it's always visible at screen coordinates, not world coordinates.
-	# This matches the JS approach where HUD draws on the canvas directly.
+	# We create match HUD inside HUDRoot on a CanvasLayer outside SubViewport.
+	# The root is scaled at native window resolution, avoiding viewport-stretched HUD pixels.
 
 	impact_flash = ColorRect.new()
 	impact_flash.position = Vector2.ZERO
@@ -906,19 +938,19 @@ func _create_hud() -> void:
 	impact_flash.color = Color(1.0, 1.0, 1.0, 0.0)
 	impact_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	impact_flash.visible = false
-	add_child(impact_flash)
+	_ui_add_child(impact_flash)
 
 	p1_health_widget = HEALTH_BAR_SCENE.instantiate()
 	p1_health_widget.position = Vector2(8, 4)
 	p1_health_widget.hero_name = "TEKNIUM"
 	p1_health_widget.slot = "P1"
-	add_child(p1_health_widget)
+	_ui_add_child(p1_health_widget)
 
 	p2_health_widget = HEALTH_BAR_SCENE.instantiate()
-	p2_health_widget.position = Vector2(274, 4)
+	p2_health_widget.position = Vector2(292, 4)
 	p2_health_widget.hero_name = "TEKNIUM"
 	p2_health_widget.slot = "AI"
-	add_child(p2_health_widget)
+	_ui_add_child(p2_health_widget)
 
 	timer_bg = TextureRect.new()
 	timer_bg.texture = load("res://assets/ui/timer_frame.png")
@@ -928,7 +960,7 @@ func _create_hud() -> void:
 	timer_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	timer_bg.stretch_mode = TextureRect.STRETCH_SCALE
 	timer_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	add_child(timer_bg)
+	_ui_add_child(timer_bg)
 
 	timer_label = Label.new()
 	timer_label.position = Vector2(232, 13)
@@ -937,7 +969,7 @@ func _create_hud() -> void:
 	timer_label.add_theme_font_override("font", HUD_FONT)
 	timer_label.add_theme_font_size_override("font_size", 18)
 	timer_label.add_theme_color_override("font_color", Color(0.34, 1.25, 1.05))
-	add_child(timer_label)
+	_ui_add_child(timer_label)
 
 	timer_word_label = Label.new()
 	timer_word_label.position = Vector2(232, 36)
@@ -947,7 +979,7 @@ func _create_hud() -> void:
 	timer_word_label.add_theme_font_override("font", HUD_FONT)
 	timer_word_label.add_theme_font_size_override("font_size", 8)
 	timer_word_label.add_theme_color_override("font_color", Color(0.70, 0.96, 1.0))
-	add_child(timer_word_label)
+	_ui_add_child(timer_word_label)
 
 	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
 	p2_display_health = p2.MAX_HEALTH if p2 else 1000.0
@@ -960,21 +992,21 @@ func _create_hud() -> void:
 	announcement_label.add_theme_font_size_override("font_size", 17)
 	announcement_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 	announcement_label.visible = false
-	add_child(announcement_label)
+	_ui_add_child(announcement_label)
 
 	result_panel_border = ColorRect.new()
 	result_panel_border.position = Vector2(130, 52)
 	result_panel_border.size = Vector2(252, 98)
 	result_panel_border.color = Color(0.0, 0.92, 0.82, 0.95)
 	result_panel_border.visible = false
-	add_child(result_panel_border)
+	_ui_add_child(result_panel_border)
 
 	result_panel_bg = ColorRect.new()
 	result_panel_bg.position = Vector2(133, 55)
 	result_panel_bg.size = Vector2(246, 92)
 	result_panel_bg.color = Color(0.02, 0.05, 0.08, 0.86)
 	result_panel_bg.visible = false
-	add_child(result_panel_bg)
+	_ui_add_child(result_panel_bg)
 
 	result_title_label = Label.new()
 	result_title_label.position = Vector2(145, 64)
@@ -983,7 +1015,7 @@ func _create_hud() -> void:
 	result_title_label.add_theme_font_size_override("font_size", 12)
 	result_title_label.add_theme_color_override("font_color", Color(0.98, 1.0, 1.0))
 	result_title_label.visible = false
-	add_child(result_title_label)
+	_ui_add_child(result_title_label)
 
 	result_status_label = Label.new()
 	result_status_label.position = Vector2(145, 82)
@@ -992,7 +1024,7 @@ func _create_hud() -> void:
 	result_status_label.add_theme_font_size_override("font_size", 12)
 	result_status_label.add_theme_color_override("font_color", Color(0.86, 0.98, 1.0))
 	result_status_label.visible = false
-	add_child(result_status_label)
+	_ui_add_child(result_status_label)
 
 	result_winner_label = Label.new()
 	result_winner_label.position = Vector2(145, 102)
@@ -1001,7 +1033,7 @@ func _create_hud() -> void:
 	result_winner_label.add_theme_font_size_override("font_size", 15)
 	result_winner_label.add_theme_color_override("font_color", Color(0.20, 1.0, 0.52))
 	result_winner_label.visible = false
-	add_child(result_winner_label)
+	_ui_add_child(result_winner_label)
 
 	result_prompt_label = Label.new()
 	result_prompt_label.position = Vector2(145, 122)
@@ -1010,7 +1042,7 @@ func _create_hud() -> void:
 	result_prompt_label.add_theme_font_size_override("font_size", 11)
 	result_prompt_label.add_theme_color_override("font_color", Color(0.70, 0.92, 1.0))
 	result_prompt_label.visible = false
-	add_child(result_prompt_label)
+	_ui_add_child(result_prompt_label)
 
 func _update_hud() -> void:
 	if not p1 or not p2:

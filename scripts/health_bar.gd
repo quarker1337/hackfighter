@@ -20,14 +20,15 @@ const SIDE_P1_LABEL := Color("#7CF7B5")
 const SIDE_P2_LABEL := Color("#FFC2E0")
 # 420px mockup bars do not fit Hackfighter's 512px game viewport twice plus timer,
 # so this keeps the round-3 proportions at the actual viewport scale.
-const BAR_WIDTH: float = 184.0
-const BAR_HEIGHT: float = 36.0
-const FILL_INSET_X: float = 6.0
-const FILL_INSET_Y: float = 6.0
-const FILL_HEIGHT: float = 24.0
-const PORTRAIT_SIZE: float = 56.0
-const PORTRAIT_OVERLAP: float = 10.0
-const LABEL_HEIGHT: float = 14.0
+const BAR_WIDTH: float = 164.0
+const BAR_HEIGHT: float = 27.0
+const FILL_INSET_X: float = 4.0
+const FILL_INSET_Y: float = 4.0
+const FILL_HEIGHT: float = 19.0
+const PORTRAIT_WIDTH: float = 54.0
+const PORTRAIT_HEIGHT: float = 54.0
+const PORTRAIT_OVERLAP: float = 6.0
+const LABEL_HEIGHT: float = 12.0
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
 
 var _current_health: int
@@ -60,13 +61,13 @@ func _configure_layout() -> void:
 	_full_width = BAR_WIDTH - (FILL_INSET_X * 2.0)
 	fill.size = Vector2(_full_width, FILL_HEIGHT)
 	fill.position = Vector2.ZERO
-	fill.patch_margin_left = 18
-	fill.patch_margin_top = 12
-	fill.patch_margin_right = 18
-	fill.patch_margin_bottom = 12
+	fill.patch_margin_left = 8
+	fill.patch_margin_top = 8
+	fill.patch_margin_right = 8
+	fill.patch_margin_bottom = 8
 	fill_clip.size = Vector2(_full_width, FILL_HEIGHT)
-	portrait.size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
-	portrait_ring.size = Vector2(PORTRAIT_SIZE, PORTRAIT_SIZE)
+	portrait.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
+	portrait_ring.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	bar.scale.x = 1.0
 	fill_clip.anchor_top = 0.0
 	fill_clip.anchor_bottom = 0.0
@@ -75,37 +76,39 @@ func _configure_layout() -> void:
 	fill_clip.position = Vector2(FILL_INSET_X, FILL_INSET_Y)
 
 	if slot == "P1":
-		portrait.position = Vector2(0, 2)
+		portrait.position = Vector2(0, 3)
 		portrait_ring.position = portrait.position
-		bar.position = Vector2(PORTRAIT_SIZE - PORTRAIT_OVERLAP, 12)
-		name_label.position = Vector2(PORTRAIT_SIZE + 2, -2)
-		name_label.size = Vector2(BAR_WIDTH - 24, LABEL_HEIGHT)
+		bar.position = Vector2(PORTRAIT_WIDTH - PORTRAIT_OVERLAP, 16)
+		name_label.position = Vector2(PORTRAIT_WIDTH + 2, 1)
+		name_label.size = Vector2(BAR_WIDTH - 12, LABEL_HEIGHT)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	else:
-		bar.position = Vector2(0, 12)
-		portrait.position = Vector2(BAR_WIDTH - PORTRAIT_OVERLAP, 2)
+		bar.position = Vector2(0, 16)
+		portrait.position = Vector2(BAR_WIDTH - PORTRAIT_OVERLAP, 3)
 		portrait_ring.position = portrait.position
-		name_label.position = Vector2(8, -2)
-		name_label.size = Vector2(BAR_WIDTH - 24, LABEL_HEIGHT)
+		name_label.position = Vector2(4, 1)
+		name_label.size = Vector2(BAR_WIDTH - 12, LABEL_HEIGHT)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 func _apply_assets() -> void:
 	track.texture = load("res://assets/ui/healthbar_track.png")
+	track.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	fill.texture = track.texture
+	fill.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	outline.texture = load("res://assets/ui/healthbar_outline.png")
-	portrait_ring.texture = load("res://assets/ui/portrait_ring.png")
-	portrait.texture = portrait_texture if portrait_texture else _load_portrait_texture(hero_name)
+	outline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	portrait_ring.texture = null
+	portrait_ring.visible = false
+	portrait.texture = load("res://assets/ui/hero_profile.png")
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
-	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# UI profile art is authored higher than the logical slot so downscaling can
+	# stay smooth on the high-res HUD canvas. Keep gameplay sprites nearest, not this.
+	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	portrait_ring.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait_ring.stretch_mode = TextureRect.STRETCH_SCALE
 	portrait_ring.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	var mask_shader := load("res://shaders/circle_mask.gdshader")
-	if mask_shader:
-		var mask_material := ShaderMaterial.new()
-		mask_material.shader = mask_shader
-		portrait.material = mask_material
+	portrait.material = null
 	var fill_shader := load("res://shaders/healthbar_fill.gdshader")
 	if fill_shader:
 		var fill_material := ShaderMaterial.new()
@@ -114,8 +117,8 @@ func _apply_assets() -> void:
 
 func _apply_side_theme() -> void:
 	_accent = SIDE_P1_ACCENT if slot == "P1" else SIDE_P2_ACCENT
-	outline.modulate = _accent
-	portrait_ring.modulate = _accent
+	outline.modulate = Color.WHITE
+	portrait_ring.modulate = Color.WHITE
 	name_label.add_theme_font_override("font", HUD_FONT)
 	name_label.add_theme_font_size_override("font_size", 10)
 	name_label.add_theme_color_override("font_color", SIDE_P1_LABEL if slot == "P1" else SIDE_P2_LABEL)
