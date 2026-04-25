@@ -40,23 +40,14 @@ const HITSTOP_ON_HIT: int = 5
 const HITSTOP_ON_BLOCK: int = 3
 
 ## HUD nodes (created programmatically)
-var p1_health_bar: ColorRect = null
-var p2_health_bar: ColorRect = null
-var p1_health_lag_bar: ColorRect = null
-var p2_health_lag_bar: ColorRect = null
-var p1_health_bg: ColorRect = null
-var p2_health_bg: ColorRect = null
-var p1_health_border: ColorRect = null
-var p2_health_border: ColorRect = null
-var p1_health_label: Label = null
-var p2_health_label: Label = null
-var p1_name_label: Label = null
-var p2_name_label: Label = null
-var p1_hud_panel: ColorRect = null
-var p2_hud_panel: ColorRect = null
-var timer_bg: ColorRect = null
-var timer_border: ColorRect = null
+## HealthBar.gd renders labels like P1 — TEKNIUM and AI — TEKNIUM.
+const HEALTH_BAR_SCENE := preload("res://scenes/HealthBar.tscn")
+const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
+var p1_health_widget: Control = null
+var p2_health_widget: Control = null
+var timer_bg: TextureRect = null
 var timer_label: Label = null
+var timer_word_label: Label = null
 var announcement_label: Label = null
 var result_panel_bg: ColorRect = null
 var result_panel_border: ColorRect = null
@@ -281,6 +272,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		var knockdown: bool = atk_data.get("knockdown", false)
 		defender.pushback_dir = push_dir
 		defender.apply_hit(atk_data.damage, atk_data.hitstun, atk_data.pushback, knockdown)
+		_notify_health_damage(defender, atk_data.damage)
 		attacker.apply_hitstop(HITSTOP_ON_HIT)
 		defender.apply_hitstop(HITSTOP_ON_HIT)
 		SoundManager.play_hit_sound(attacker.current_attack)
@@ -299,6 +291,11 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 			_trigger_impact_flash(Color(1.0, 1.0, 1.0, 1.0), 0.08)
 		if defender.health <= 0:
 			SoundManager.play_ko()
+
+func _notify_health_damage(defender: Player, amount: int) -> void:
+	var widget := p1_health_widget if defender == p1 else p2_health_widget
+	if widget and widget.has_method("take_damage"):
+		widget.take_damage(amount)
 
 func _box_overlap(a: Rect2, b: Rect2) -> bool:
 	return a.position.x < b.position.x + b.size.x and \
@@ -501,15 +498,15 @@ func _start_match() -> void:
 		stage.set_stage_theme("city")
 	_hide_result_panel()
 	_set_game_hud_visible(true)
-	# Placeholder roster shell: backend still uses current default real build, with SF kept as easter egg.
+	# Temporary roster shell: backend still uses current default real build, with SF kept as easter egg.
 	if p1:
 		p1.set_character("Teknium")
 	if p2:
 		p2.set_character("Teknium")
-	if p1_name_label:
-		p1_name_label.text = selected_fighter_name
-	if p2_name_label:
-		p2_name_label.text = "CPU"
+	if p1_health_widget and p1_health_widget.has_method("configure"):
+		p1_health_widget.configure(selected_fighter_name, "P1")
+	if p2_health_widget and p2_health_widget.has_method("configure"):
+		p2_health_widget.configure("TEKNIUM", "AI")
 	current_round = 1
 	p1_round_wins = 0
 	p2_round_wins = 0
@@ -784,23 +781,12 @@ func _animate_menu_ui() -> void:
 func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
 		impact_flash,
-		p1_hud_panel, p2_hud_panel,
-		timer_bg, timer_border,
-		p1_health_bg, p2_health_bg,
-		p1_health_border, p2_health_border,
-		p1_health_lag_bar, p2_health_lag_bar,
-		p1_health_bar, p2_health_bar,
-		p1_health_label, p2_health_label,
-		p1_name_label, p2_name_label,
-		timer_label,
+		p1_health_widget, p2_health_widget,
+		timer_bg, timer_label, timer_word_label,
 	]
 	for node in nodes:
 		if node:
 			node.visible = vis
-	for dot in p1_round_dots:
-		if dot: dot.visible = vis
-	for dot in p2_round_dots:
-		if dot: dot.visible = vis
 
 func _start_next_round(first_round: bool = false) -> void:
 	round_state = RoundState.PLAYING
@@ -922,135 +908,49 @@ func _create_hud() -> void:
 	impact_flash.visible = false
 	add_child(impact_flash)
 
-	# Health bar modules
-	p1_hud_panel = ColorRect.new()
-	p1_hud_panel.position = Vector2(HUD_P1_BAR_X - 10, HUD_BAR_Y - 8)
-	p1_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
-	p1_hud_panel.color = Color(0.03, 0.06, 0.09, 0.90)
-	add_child(p1_hud_panel)
+	p1_health_widget = HEALTH_BAR_SCENE.instantiate()
+	p1_health_widget.position = Vector2(8, 4)
+	p1_health_widget.hero_name = "TEKNIUM"
+	p1_health_widget.slot = "P1"
+	add_child(p1_health_widget)
 
-	p2_hud_panel = ColorRect.new()
-	p2_hud_panel.position = Vector2(HUD_P2_BAR_X - 10, HUD_BAR_Y - 8)
-	p2_hud_panel.size = Vector2(HUD_BAR_WIDTH + 20, 40)
-	p2_hud_panel.color = Color(0.03, 0.06, 0.09, 0.90)
-	add_child(p2_hud_panel)
+	p2_health_widget = HEALTH_BAR_SCENE.instantiate()
+	p2_health_widget.position = Vector2(274, 4)
+	p2_health_widget.hero_name = "TEKNIUM"
+	p2_health_widget.slot = "AI"
+	add_child(p2_health_widget)
 
-	# Health bar backgrounds
-	p1_health_bg = ColorRect.new()
-	p1_health_bg.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
-	p1_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bg.color = Color(0.08, 0.12, 0.16)
-	add_child(p1_health_bg)
-	p1_health_border = ColorRect.new()
-	p1_health_border.position = Vector2(HUD_P1_BAR_X - 2, HUD_BAR_Y - 2)
-	p1_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
-	p1_health_border.color = Color(0.0, 0.92, 0.82)
-	p1_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(p1_health_border)
-	move_child(p1_health_border, p1_health_bg.get_index())
-
-	p2_health_bg = ColorRect.new()
-	p2_health_bg.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
-	p2_health_bg.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bg.color = Color(0.08, 0.12, 0.16)
-	add_child(p2_health_bg)
-	p2_health_border = ColorRect.new()
-	p2_health_border.position = Vector2(HUD_P2_BAR_X - 2, HUD_BAR_Y - 2)
-	p2_health_border.size = Vector2(HUD_BAR_WIDTH + 4, HUD_BAR_HEIGHT + 4)
-	p2_health_border.color = Color(0.0, 0.92, 0.82)
-	p2_health_border.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(p2_health_border)
-	move_child(p2_health_border, p2_health_bg.get_index())
-
-	# Health bar fills
-	p1_health_lag_bar = ColorRect.new()
-	p1_health_lag_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
-	p1_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_lag_bar.color = Color(1.0, 0.56, 0.20)
-	add_child(p1_health_lag_bar)
-
-	p2_health_lag_bar = ColorRect.new()
-	p2_health_lag_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
-	p2_health_lag_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_lag_bar.color = Color(1.0, 0.56, 0.20)
-	add_child(p2_health_lag_bar)
-
-	p1_health_bar = ColorRect.new()
-	p1_health_bar.position = Vector2(HUD_P1_BAR_X, HUD_BAR_Y)
-	p1_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p1_health_bar.color = Color(0.18, 1.0, 0.78)
-	add_child(p1_health_bar)
-
-	p2_health_bar = ColorRect.new()
-	p2_health_bar.position = Vector2(HUD_P2_BAR_X, HUD_BAR_Y)
-	p2_health_bar.size = Vector2(HUD_BAR_WIDTH, HUD_BAR_HEIGHT)
-	p2_health_bar.color = Color(0.18, 1.0, 0.78)
-	add_child(p2_health_bar)
-
-	# Health text labels
-	p1_name_label = Label.new()
-	p1_name_label.position = Vector2(HUD_P1_BAR_X + 2, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
-	p1_name_label.add_theme_font_size_override("font_size", 11)
-	p1_name_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
-	p1_name_label.text = "OLD_PROTOTYPE_FIGHTER"
-	add_child(p1_name_label)
-
-	p2_name_label = Label.new()
-	p2_name_label.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - 48, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
-	p2_name_label.add_theme_font_size_override("font_size", 11)
-	p2_name_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
-	p2_name_label.text = "OLD_PROTOTYPE_FIGHTER"
-	add_child(p2_name_label)
-
-	p1_health_label = Label.new()
-	p1_health_label.position = Vector2(HUD_P1_BAR_X + HUD_BAR_WIDTH - 56, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
-	p1_health_label.add_theme_font_size_override("font_size", 10)
-	p1_health_label.add_theme_color_override("font_color", Color(0.38, 0.96, 0.88))
-	add_child(p1_health_label)
-
-	p2_health_label = Label.new()
-	p2_health_label.position = Vector2(HUD_P2_BAR_X + 4, HUD_BAR_Y + HUD_BAR_HEIGHT + 3)
-	p2_health_label.add_theme_font_size_override("font_size", 10)
-	p2_health_label.add_theme_color_override("font_color", Color(0.38, 0.96, 0.88))
-	add_child(p2_health_label)
-
-	timer_border = ColorRect.new()
-	timer_border.position = Vector2(HUD_TIMER_X - 12, HUD_TIMER_Y - 6)
-	timer_border.size = Vector2(52, 32)
-	timer_border.color = Color(0.0, 0.92, 0.82)
-	add_child(timer_border)
-
-	timer_bg = ColorRect.new()
-	timer_bg.position = Vector2(HUD_TIMER_X - 10, HUD_TIMER_Y - 4)
-	timer_bg.size = Vector2(48, 28)
-	timer_bg.color = Color(0.04, 0.07, 0.10, 0.96)
+	timer_bg = TextureRect.new()
+	timer_bg.texture = load("res://assets/ui/timer_frame.png")
+	timer_bg.position = Vector2(220, 7)
+	timer_bg.size = Vector2(72, 56)
+	timer_bg.modulate = Color(0.30, 1.25, 1.12)
+	timer_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	timer_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	timer_bg.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	add_child(timer_bg)
 
 	timer_label = Label.new()
-	timer_label.position = Vector2(HUD_TIMER_X - 2, HUD_TIMER_Y - 1)
-	timer_label.size = Vector2(32, 22)
+	timer_label.position = Vector2(232, 13)
+	timer_label.size = Vector2(48, 24)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	timer_label.add_theme_font_size_override("font_size", 16)
-	timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
+	timer_label.add_theme_font_override("font", HUD_FONT)
+	timer_label.add_theme_font_size_override("font_size", 18)
+	timer_label.add_theme_color_override("font_color", Color(0.34, 1.25, 1.05))
 	add_child(timer_label)
+
+	timer_word_label = Label.new()
+	timer_word_label.position = Vector2(232, 36)
+	timer_word_label.size = Vector2(48, 12)
+	timer_word_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer_word_label.text = "TIME"
+	timer_word_label.add_theme_font_override("font", HUD_FONT)
+	timer_word_label.add_theme_font_size_override("font_size", 8)
+	timer_word_label.add_theme_color_override("font_color", Color(0.70, 0.96, 1.0))
+	add_child(timer_word_label)
 
 	p1_display_health = p1.MAX_HEALTH if p1 else 1000.0
 	p2_display_health = p2.MAX_HEALTH if p2 else 1000.0
-
-	for i in range(ROUNDS_TO_WIN):
-		var p1_dot := ColorRect.new()
-		p1_dot.position = Vector2(HUD_P1_BAR_X + float(i) * HUD_DOT_SPACING, HUD_DOT_Y)
-		p1_dot.size = Vector2(HUD_DOT_SIZE, HUD_DOT_SIZE)
-		p1_dot.color = Color(0.3, 0.3, 0.3)
-		add_child(p1_dot)
-		p1_round_dots.append(p1_dot)
-
-		var p2_dot := ColorRect.new()
-		p2_dot.position = Vector2(HUD_P2_BAR_X + HUD_BAR_WIDTH - HUD_DOT_SIZE - float(i) * HUD_DOT_SPACING, HUD_DOT_Y)
-		p2_dot.size = Vector2(HUD_DOT_SIZE, HUD_DOT_SIZE)
-		p2_dot.color = Color(0.3, 0.3, 0.3)
-		add_child(p2_dot)
-		p2_round_dots.append(p2_dot)
 
 	announcement_label = Label.new()
 	announcement_label.position = Vector2(92, 92)
@@ -1119,56 +1019,32 @@ func _update_hud() -> void:
 	p1_display_health = maxf(float(p1.health), move_toward(p1_display_health, float(p1.health), HEALTH_LAG_SPEED * get_process_delta_time()))
 	p2_display_health = maxf(float(p2.health), move_toward(p2_display_health, float(p2.health), HEALTH_LAG_SPEED * get_process_delta_time()))
 
-	# P1 health bar (fills left to right)
-	var p1_ratio: float = float(p1.health) / float(p1.MAX_HEALTH)
-	var p1_lag_ratio: float = p1_display_health / float(p1.MAX_HEALTH)
-	p1_health_lag_bar.size.x = HUD_BAR_WIDTH * p1_lag_ratio
-	p1_health_bar.size.x = HUD_BAR_WIDTH * p1_ratio
-	p1_health_bar.color = _health_color(p1_ratio)
-	p1_health_label.text = "P1: %d" % p1.health
-
-	# P2 bar anchors from the right
-	var p2_ratio: float = float(p2.health) / float(p2.MAX_HEALTH)
-	var p2_lag_ratio: float = p2_display_health / float(p2.MAX_HEALTH)
-	p2_health_lag_bar.size.x = HUD_BAR_WIDTH * p2_lag_ratio
-	p2_health_lag_bar.position.x = HUD_P2_BAR_X + HUD_BAR_WIDTH * (1.0 - p2_lag_ratio)
-	p2_health_bar.size.x = HUD_BAR_WIDTH * p2_ratio
-	p2_health_bar.position.x = HUD_P2_BAR_X + HUD_BAR_WIDTH * (1.0 - p2_ratio)
-	p2_health_bar.color = _health_color(p2_ratio)
-	p2_health_label.text = "P2: %d" % p2.health
+	# Health bars
+	if p1_health_widget and p1_health_widget.has_method("set_health"):
+		p1_health_widget.set_health(p1.health)
+	if p2_health_widget and p2_health_widget.has_method("set_health"):
+		p2_health_widget.set_health(p2.health)
 
 	timer_label.text = "%02d" % int(ceil(round_time_left))
 	if round_time_left <= 10.0 and not intro_active:
-		timer_label.add_theme_color_override("font_color", Color(1.0, 0.34, 0.40))
-		timer_border.color = Color(1.0, 0.34, 0.40)
+		timer_label.add_theme_color_override("font_color", Color(1.25, 0.34, 0.40))
+		timer_bg.modulate = Color(1.25, 0.34, 0.40)
 	else:
-		timer_label.add_theme_color_override("font_color", Color(0.30, 1.0, 0.90))
-		timer_border.color = Color(0.0, 0.92, 0.82)
+		timer_label.add_theme_color_override("font_color", Color(0.34, 1.25, 1.05))
+		timer_bg.modulate = Color(0.30, 1.25, 1.12)
 	if intro_active:
 		timer_label.modulate.a = 0.7
+		timer_word_label.modulate.a = 0.7
 		timer_bg.modulate.a = 0.78
 	else:
 		timer_label.modulate.a = 1.0
+		timer_word_label.modulate.a = 1.0
 		timer_bg.modulate.a = 1.0
 
 func _update_round_dots() -> void:
-	for i in range(ROUNDS_TO_WIN):
-		if i < p1_round_wins:
-			p1_round_dots[i].color = Color.YELLOW
-		else:
-			p1_round_dots[i].color = Color(0.3, 0.3, 0.3)
-		if i < p2_round_wins:
-			p2_round_dots[i].color = Color.YELLOW
-		else:
-			p2_round_dots[i].color = Color(0.3, 0.3, 0.3)
-
-func _health_color(ratio: float) -> Color:
-	if ratio > 0.5:
-		return Color.GREEN
-	elif ratio > 0.25:
-		return Color.YELLOW
-	else:
-		return Color.RED
+	# Round-win pips were removed from the healthbar area in round 3 because they
+	# read as stray yellow square artifacts beside the portraits.
+	return
 
 # ── Debug ─────────────────────────────────────────────────────────────
 
