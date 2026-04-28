@@ -871,6 +871,12 @@ func _set_game_hud_visible(vis: bool) -> void:
 		if node:
 			node.visible = vis
 
+func _play_profile_round_intro_fade() -> void:
+	if p1_health_widget and p1_health_widget.has_method("play_round_intro_fade"):
+		p1_health_widget.play_round_intro_fade(0.0)
+	if p2_health_widget and p2_health_widget.has_method("play_round_intro_fade"):
+		p2_health_widget.play_round_intro_fade(0.10)
+
 func _start_next_round(first_round: bool = false) -> void:
 	round_state = RoundState.PLAYING
 	intro_active = true
@@ -905,6 +911,7 @@ func _start_next_round(first_round: bool = false) -> void:
 	if ai:
 		ai.reset()
 	_apply_camera_tracking(true)
+	_play_profile_round_intro_fade()
 	if announcement_label:
 		announcement_label.visible = true
 		announcement_label.text = "ROUND %d INITIALIZING" % current_round

@@ -68,6 +68,7 @@ required_main = [
     'CanvasLayer.new()',
     'hud_root.add_child(node)',
     'game_view.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST',
+    '_play_profile_round_intro_fade()', 'play_round_intro_fade(0.10)',
 ]
 missing_main = [s for s in required_main if s not in main]
 
@@ -94,6 +95,8 @@ required_health = [
     'PORTRAIT_SCANLINE_SCROLL_SPEED: float = 9.5', 'PORTRAIT_SCANLINE_INSET: Vector2 = Vector2(4, 4)',
     'PORTRAIT_SCANLINE_CLIP_SIZE: Vector2 = Vector2(46, 46)', 'PORTRAIT_SCANLINE_BASE_ALPHA: float = 0.26',
     'PORTRAIT_SCANLINE_GLITCH_ALPHA: float = 0.48', 'PORTRAIT_GLITCH_MIN_DELAY: float = 1.8',
+    'PORTRAIT_ROUND_FADE_DURATION: float = 0.62', 'PORTRAIT_ROUND_FADE_STAGGER: float = 0.10',
+    'play_round_intro_fade', '_set_profile_intro_alpha', '_profile_round_fade_tween',
     '_update_profile_fx(delta)', 'portrait_scanline_a.position', 'portrait_scanline_b.position',
     'portrait_fx_clip.position = portrait.position + PORTRAIT_SCANLINE_INSET + Vector2(jitter_x, 0)',
     'Color.WHITE, 0.12)',

@@ -47,6 +47,8 @@ const PORTRAIT_GLITCH_MIN_DELAY: float = 1.8
 const PORTRAIT_GLITCH_MAX_DELAY: float = 4.2
 const PORTRAIT_GLITCH_DURATION_MIN: float = 0.055
 const PORTRAIT_GLITCH_DURATION_MAX: float = 0.13
+const PORTRAIT_ROUND_FADE_DURATION: float = 0.62
+const PORTRAIT_ROUND_FADE_STAGGER: float = 0.10
 const LABEL_HEIGHT: float = 12.0
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
 
@@ -59,6 +61,7 @@ var _profile_scanline_offset: float = 0.0
 var _profile_next_glitch_time: float = 0.0
 var _profile_glitch_remaining: float = 0.0
 var _profile_glitch_jitter: float = 0.0
+var _profile_round_fade_tween: Tween = null
 var _profile_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -73,6 +76,7 @@ func _ready() -> void:
 	_apply_side_theme()
 	_apply_hero_theme()
 	set_health(max_health, false)
+	_set_profile_intro_alpha(1.0)
 
 func _process(delta: float) -> void:
 	_update_profile_fx(delta)
@@ -233,6 +237,24 @@ func _make_portrait_scanline(node_name: String) -> TextureRect:
 
 func _schedule_next_profile_glitch() -> void:
 	_profile_next_glitch_time = _profile_rng.randf_range(PORTRAIT_GLITCH_MIN_DELAY, PORTRAIT_GLITCH_MAX_DELAY)
+
+func play_round_intro_fade(delay: float = 0.0) -> void:
+	if _profile_round_fade_tween and _profile_round_fade_tween.is_valid():
+		_profile_round_fade_tween.kill()
+	_set_profile_intro_alpha(0.0)
+	_profile_round_fade_tween = create_tween().set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	if delay > 0.0:
+		_profile_round_fade_tween.tween_interval(delay)
+	_profile_round_fade_tween.tween_method(_set_profile_intro_alpha, 0.0, 1.0, PORTRAIT_ROUND_FADE_DURATION)
+
+func _set_profile_intro_alpha(alpha: float) -> void:
+	alpha = clampf(alpha, 0.0, 1.0)
+	if portrait:
+		portrait.modulate = Color(1, 1, 1, alpha)
+	if portrait_ring:
+		portrait_ring.modulate = Color(1, 1, 1, alpha)
+	if portrait_fx_clip:
+		portrait_fx_clip.modulate = Color(1, 1, 1, alpha)
 
 func _update_profile_fx(delta: float) -> void:
 	if not portrait_fx_clip or not portrait_scanline_a or not portrait_scanline_b:
