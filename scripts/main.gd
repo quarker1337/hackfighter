@@ -52,6 +52,7 @@ var hud_layer: CanvasLayer = null
 var hud_root: Control = null
 var p1_health_widget: Control = null
 var p2_health_widget: Control = null
+var timer_backplate: ColorRect = null
 var timer_bg: NinePatchRect = null
 var timer_label: Label = null
 var timer_word_label: Label = null
@@ -864,7 +865,7 @@ func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
 		impact_flash,
 		p1_health_widget, p2_health_widget,
-		timer_bg, timer_label,
+		timer_backplate, timer_bg, timer_label,
 	]
 	for node in nodes:
 		if node:
@@ -994,6 +995,15 @@ func _create_hud() -> void:
 	p2_health_widget.hero_name = "TEKNIUM"
 	p2_health_widget.slot = "AI"
 	_ui_add_child(p2_health_widget)
+
+	timer_backplate = ColorRect.new()
+	timer_backplate.position = Vector2(229, 11)
+	timer_backplate.size = Vector2(54, 18)
+	# Dark translucent teal, matching the empty healthbar track family while
+	# keeping the stage visible through the countdown hollow.
+	timer_backplate.color = Color(0.02, 0.16, 0.16, 0.46)
+	timer_backplate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui_add_child(timer_backplate)
 
 	timer_bg = NinePatchRect.new()
 	timer_bg.texture = load("res://assets/ui/countdown_timer.png")
