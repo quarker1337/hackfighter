@@ -172,17 +172,24 @@ func _apply_character_visuals() -> void:
 	sprite.sprite_frames = frames
 	if rim_sprite:
 		rim_sprite.sprite_frames = frames
-	if character_name.to_lower() == "teknium":
-		sprite.scale = Vector2(0.78, 0.78)
-		shadow_base_scale = Vector2(0.50, 0.28)
-	else:
-		sprite.scale = Vector2(1.33333, 1.33333)
-		shadow_base_scale = Vector2(0.62, 0.30)
+	match character_name.to_lower():
+		"teknium":
+			sprite.position = Vector2.ZERO
+			sprite.scale = Vector2(0.78, 0.78)
+			shadow_base_scale = Vector2(0.50, 0.28)
+		"lobster":
+			sprite.position = Vector2(0.0, -4.0)
+			sprite.scale = Vector2(0.78, 0.78)
+			shadow_base_scale = Vector2(0.58, 0.30)
+		_:
+			sprite.position = Vector2.ZERO
+			sprite.scale = Vector2(1.33333, 1.33333)
+			shadow_base_scale = Vector2(0.62, 0.30)
 	if shadow_sprite:
 		shadow_sprite.scale = shadow_base_scale
 	if rim_sprite:
 		rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
-		rim_sprite.position = RIM_OFFSET
+		rim_sprite.position = sprite.position + RIM_OFFSET
 		rim_sprite.modulate = RIM_COLOR
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation("idle") and sprite.sprite_frames.get_frame_count("idle") > 0:
 		sprite.play("idle")
@@ -212,7 +219,7 @@ func _create_rim_sprite() -> void:
 	rim_sprite = AnimatedSprite2D.new()
 	rim_sprite.name = "RimSprite"
 	rim_sprite.z_index = -5
-	rim_sprite.position = RIM_OFFSET
+	rim_sprite.position = sprite.position + RIM_OFFSET
 	rim_sprite.modulate = RIM_COLOR
 	add_child(rim_sprite)
 	move_child(rim_sprite, sprite.get_index())
@@ -252,14 +259,16 @@ func _update_shadow() -> void:
 func _sync_visual_layers() -> void:
 	if sprite == null:
 		return
-	sprite.flip_h = not facing_right
+	# Most current sheets face right by default; Lobster starter sheets face left.
+	# Keep gameplay facing semantics intact and only invert the visual flip for Lobster.
+	sprite.flip_h = facing_right if character_name.to_lower() == "lobster" else not facing_right
 	if rim_sprite == null:
 		return
 	rim_sprite.visible = sprite.visible
 	rim_sprite.sprite_frames = sprite.sprite_frames
 	rim_sprite.flip_h = sprite.flip_h
 	rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
-	rim_sprite.position = RIM_OFFSET
+	rim_sprite.position = sprite.position + RIM_OFFSET
 	rim_sprite.modulate = RIM_COLOR
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation(sprite.animation):
 		if rim_sprite.animation != sprite.animation:

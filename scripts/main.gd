@@ -520,9 +520,8 @@ func _start_match() -> void:
 		stage.set_stage_theme("city")
 	_hide_result_panel()
 	_set_game_hud_visible(true)
-	# Temporary roster shell: backend still uses current default real build, with SF kept as easter egg.
 	if p1:
-		p1.set_character("Teknium")
+		p1.set_character(selected_fighter_name)
 	if p2:
 		p2.set_character("Teknium")
 	if p1_health_widget and p1_health_widget.has_method("configure"):
@@ -809,12 +808,13 @@ func _update_menu_ui() -> void:
 		AppState.FIGHTER_SELECT:
 			menu_title_label.text = "FIGHTER SELECT"
 			menu_body_label.text = ""
-			fighter_select_desc_label.text = "Select a placeholder operative. Current live backend remains the hidden easter-egg build."
+			fighter_select_desc_label.text = "Select an operative. Lobster has starter idle/walk/hurt sheets wired in."
 			for i in range(FIGHTER_PLACEHOLDERS.size()):
 				var selected := i == fighter_select_index
 				fighter_card_backs[i].color = Color(0.0, 0.85, 0.72, 0.36 if selected else 0.18)
 				fighter_card_fills[i].color = Color(0.08, 0.13, 0.18, 1.0) if selected else Color(0.05, 0.08, 0.11, 0.98)
 				fighter_card_labels[i].modulate = Color(0.98, 1.0, 1.0, 1.0) if selected else Color(0.82, 0.9, 0.95, 0.92)
+				fighter_card_tags[i].text = "STARTER\nASSETS" if FIGHTER_PLACEHOLDERS[i] == "LOBSTER" else "PLACEHOLDER\nASSET SLOT"
 				fighter_card_tags[i].modulate = Color(0.55, 0.92, 0.88, 1.0) if selected else Color(0.40, 0.68, 0.76, 0.88)
 			menu_hint_label.text = "NAV: W/S   CONFIRM: ENTER   BACK: U/J"
 		AppState.CONTROLS:
