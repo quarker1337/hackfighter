@@ -74,11 +74,11 @@ const GETTING_UP_FRAMES: int   = 20
 @export var character_name: String = "Teknium"
 @export var facing_right: bool = true
 
-const SHADOW_TEX_SIZE := Vector2i(128, 32)
-const SHADOW_FEET_OFFSET_Y := 8.0
-const SHADOW_GROUND_ALPHA := 0.0
-const SHADOW_AIR_ALPHA := 0.0
-const SHADOW_MIN_SCALE := 0.86
+const SHADOW_TEX_SIZE := Vector2i(128, 28)
+const SHADOW_FEET_OFFSET_Y := -37.0
+const SHADOW_GROUND_ALPHA := 0.62
+const SHADOW_AIR_ALPHA := 0.18
+const SHADOW_MIN_SCALE := 0.58
 const RIM_SCALE_BONUS := 1.02
 const RIM_OFFSET := Vector2(0.0, 0.0)
 const RIM_COLOR := Color(0.82, 0.96, 1.0, 0.08)
@@ -174,10 +174,10 @@ func _apply_character_visuals() -> void:
 		rim_sprite.sprite_frames = frames
 	if character_name.to_lower() == "teknium":
 		sprite.scale = Vector2(0.78, 0.78)
-		shadow_base_scale = Vector2(1.00, 0.30)
+		shadow_base_scale = Vector2(0.50, 0.28)
 	else:
 		sprite.scale = Vector2(1.33333, 1.33333)
-		shadow_base_scale = Vector2(1.08, 0.34)
+		shadow_base_scale = Vector2(0.62, 0.30)
 	if shadow_sprite:
 		shadow_sprite.scale = shadow_base_scale
 	if rim_sprite:
@@ -200,10 +200,11 @@ func _create_shadow() -> void:
 	shadow_sprite = Sprite2D.new()
 	shadow_sprite.name = "ShadowSprite"
 	shadow_sprite.centered = true
-	shadow_sprite.z_index = -20
+	shadow_sprite.z_index = 99
+	shadow_sprite.z_as_relative = false
 	shadow_sprite.texture = _build_shadow_texture()
 	shadow_sprite.position = Vector2(0.0, SHADOW_FEET_OFFSET_Y)
-	shadow_sprite.modulate = Color(0.0, 0.0, 0.0, SHADOW_GROUND_ALPHA)
+	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, SHADOW_GROUND_ALPHA)
 	add_child(shadow_sprite)
 	move_child(shadow_sprite, 0)
 
@@ -229,8 +230,11 @@ func _build_shadow_texture() -> ImageTexture:
 			var dist := dx * dx + dy * dy
 			if dist >= 1.0:
 				continue
-			var alpha := (1.0 - dist) * 0.48
-			image.set_pixel(x, y, Color(0, 0, 0, alpha))
+			var core_alpha := pow(1.0 - dist, 0.72) * 0.72
+			var rim_alpha := smoothstep(0.48, 0.94, dist) * (1.0 - smoothstep(0.94, 1.0, dist)) * 0.10
+			var ink := Color(0.0, 0.0, 0.0, core_alpha)
+			var edge := Color(0.08, 0.24, 0.32, rim_alpha)
+			image.set_pixel(x, y, ink.blend(edge))
 	return ImageTexture.create_from_image(image)
 
 func _update_shadow() -> void:
@@ -243,7 +247,7 @@ func _update_shadow() -> void:
 	shadow_sprite.scale = shadow_base_scale * scale_drop
 	var grounded_shadow_y := ground_y - position.y + SHADOW_FEET_OFFSET_Y if ground_y > 0.0 else SHADOW_FEET_OFFSET_Y
 	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
-	shadow_sprite.modulate = Color(0.0, 0.0, 0.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
+	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
 func _sync_visual_layers() -> void:
 	if sprite == null:
