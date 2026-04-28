@@ -14,6 +14,10 @@ extends Control
 @onready var fill: NinePatchRect = $Bar/FillClip/Fill
 @onready var outline: NinePatchRect = $Bar/Outline
 
+var portrait_fx_clip: Control = null
+var portrait_scanline_a: TextureRect = null
+var portrait_scanline_b: TextureRect = null
+
 const SIDE_P1_ACCENT := Color(0.24, 1.18, 1.06, 1.0) # #3FF6E0 with bloom headroom
 const SIDE_P2_ACCENT := Color(1.28, 0.31, 0.66, 1.0) # #FF4FA8 with bloom headroom
 const SIDE_P1_LABEL := Color("#7CF7B5")
@@ -34,6 +38,15 @@ const PORTRAIT_WIDTH: float = 54.0
 const PORTRAIT_HEIGHT: float = 54.0
 const PORTRAIT_OVERLAP: float = 6.0
 const PORTRAIT_OUTWARD_OFFSET: float = 7.0
+const PORTRAIT_SCANLINE_SCROLL_SPEED: float = 9.5
+const PORTRAIT_SCANLINE_INSET: Vector2 = Vector2(4, 4)
+const PORTRAIT_SCANLINE_CLIP_SIZE: Vector2 = Vector2(46, 46)
+const PORTRAIT_SCANLINE_BASE_ALPHA: float = 0.26
+const PORTRAIT_SCANLINE_GLITCH_ALPHA: float = 0.48
+const PORTRAIT_GLITCH_MIN_DELAY: float = 1.8
+const PORTRAIT_GLITCH_MAX_DELAY: float = 4.2
+const PORTRAIT_GLITCH_DURATION_MIN: float = 0.055
+const PORTRAIT_GLITCH_DURATION_MAX: float = 0.13
 const LABEL_HEIGHT: float = 12.0
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
 
@@ -41,19 +54,34 @@ var _current_health: int
 var _full_width: float = P1_FILL_WIDTH
 var _fill_x: float = P1_FILL_X
 var _accent: Color = SIDE_P1_ACCENT
+var _profile_fx_time: float = 0.0
+var _profile_scanline_offset: float = 0.0
+var _profile_next_glitch_time: float = 0.0
+var _profile_glitch_remaining: float = 0.0
+var _profile_glitch_jitter: float = 0.0
+var _profile_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_current_health = max_health
+	_profile_rng.randomize()
+	# Offset each side so both portraits feel like separate tiny monitors.
+	_profile_scanline_offset = PORTRAIT_HEIGHT * (0.33 if slot == "P1" else 0.71)
+	_schedule_next_profile_glitch()
+	_ensure_portrait_fx_nodes()
 	_configure_layout()
 	_apply_assets()
 	_apply_side_theme()
 	_apply_hero_theme()
 	set_health(max_health, false)
 
+func _process(delta: float) -> void:
+	_update_profile_fx(delta)
+
 func configure(new_hero_name: String, new_slot: String) -> void:
 	hero_name = new_hero_name.to_upper()
 	slot = new_slot
 	if is_inside_tree():
+		_ensure_portrait_fx_nodes()
 		_configure_layout()
 		_apply_assets()
 		_apply_side_theme()
@@ -94,6 +122,13 @@ func _configure_layout() -> void:
 	fill_clip.size = Vector2(_full_width, FILL_HEIGHT)
 	portrait.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	portrait_ring.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
+	if portrait_fx_clip:
+		portrait_fx_clip.size = PORTRAIT_SCANLINE_CLIP_SIZE
+		portrait_fx_clip.clip_contents = true
+	if portrait_scanline_a:
+		portrait_scanline_a.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
+	if portrait_scanline_b:
+		portrait_scanline_b.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	bar.scale.x = 1.0
 	fill_clip.anchor_top = 0.0
 	fill_clip.anchor_bottom = 0.0
@@ -104,6 +139,8 @@ func _configure_layout() -> void:
 	if slot == "P1":
 		portrait.position = Vector2(-PORTRAIT_OUTWARD_OFFSET, 3)
 		portrait_ring.position = portrait.position
+		if portrait_fx_clip:
+			portrait_fx_clip.position = portrait.position + PORTRAIT_SCANLINE_INSET
 		bar.position = Vector2(PORTRAIT_WIDTH - PORTRAIT_OVERLAP, 16)
 		name_label.position = Vector2(PORTRAIT_WIDTH + 2, 1)
 		name_label.size = Vector2(BAR_WIDTH - 12, LABEL_HEIGHT)
@@ -112,6 +149,8 @@ func _configure_layout() -> void:
 		bar.position = Vector2(0, 16)
 		portrait.position = Vector2(BAR_WIDTH - PORTRAIT_OVERLAP + PORTRAIT_OUTWARD_OFFSET, 3)
 		portrait_ring.position = portrait.position
+		if portrait_fx_clip:
+			portrait_fx_clip.position = portrait.position + PORTRAIT_SCANLINE_INSET
 		name_label.position = Vector2(4, 1)
 		name_label.size = Vector2(BAR_WIDTH - 12, LABEL_HEIGHT)
 		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -124,14 +163,22 @@ func _apply_assets() -> void:
 	fill.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	outline.texture = load("res://assets/ui/healthbar_outline%s.png" % suffix)
 	outline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	portrait_ring.texture = null
-	portrait_ring.visible = false
+	portrait_ring.texture = load("res://assets/ui/hero_profile_top%s.png" % suffix)
+	portrait_ring.visible = true
+	portrait_ring.z_index = 3
 	portrait.texture = load("res://assets/ui/hero_profile%s.png" % suffix)
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	# UI profile art is authored higher than the logical slot so downscaling can
 	# stay smooth on the high-res HUD canvas. Keep gameplay sprites nearest, not this.
 	portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var scanline_texture := load("res://assets/ui/hero_profile_scanlines%s.png" % suffix)
+	for scanline in [portrait_scanline_a, portrait_scanline_b]:
+		if scanline:
+			scanline.texture = scanline_texture
+			scanline.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			scanline.stretch_mode = TextureRect.STRETCH_SCALE
+			scanline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	portrait_ring.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait_ring.stretch_mode = TextureRect.STRETCH_SCALE
 	portrait_ring.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
@@ -158,6 +205,60 @@ func _apply_hero_theme() -> void:
 		mat.set_shader_parameter("shine_color", colors[1])
 		mat.set_shader_parameter("shine_pos", 0.35)
 		mat.set_shader_parameter("shine_width", 0.18)
+
+func _ensure_portrait_fx_nodes() -> void:
+	if portrait_fx_clip:
+		return
+	portrait_fx_clip = Control.new()
+	portrait_fx_clip.name = "PortraitScanlineClip"
+	portrait_fx_clip.clip_contents = true
+	portrait_fx_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	portrait_fx_clip.z_index = 2
+	add_child(portrait_fx_clip)
+	move_child(portrait_fx_clip, portrait.get_index() + 1)
+	portrait_scanline_a = _make_portrait_scanline("ScanlineA")
+	portrait_scanline_b = _make_portrait_scanline("ScanlineB")
+	portrait_fx_clip.add_child(portrait_scanline_a)
+	portrait_fx_clip.add_child(portrait_scanline_b)
+
+func _make_portrait_scanline(node_name: String) -> TextureRect:
+	var scanline := TextureRect.new()
+	scanline.name = node_name
+	scanline.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scanline.modulate = Color(1, 1, 1, PORTRAIT_SCANLINE_BASE_ALPHA)
+	scanline.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	scanline.stretch_mode = TextureRect.STRETCH_SCALE
+	scanline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	return scanline
+
+func _schedule_next_profile_glitch() -> void:
+	_profile_next_glitch_time = _profile_rng.randf_range(PORTRAIT_GLITCH_MIN_DELAY, PORTRAIT_GLITCH_MAX_DELAY)
+
+func _update_profile_fx(delta: float) -> void:
+	if not portrait_fx_clip or not portrait_scanline_a or not portrait_scanline_b:
+		return
+	_profile_fx_time += delta
+	_profile_scanline_offset = fmod(_profile_scanline_offset + PORTRAIT_SCANLINE_SCROLL_SPEED * delta, PORTRAIT_HEIGHT)
+	var alpha := PORTRAIT_SCANLINE_BASE_ALPHA
+	var jitter_x := 0.0
+	if _profile_glitch_remaining > 0.0:
+		_profile_glitch_remaining = maxf(0.0, _profile_glitch_remaining - delta)
+		alpha = PORTRAIT_SCANLINE_GLITCH_ALPHA
+		# Tiny horizontal tears only on the scanline overlay, never on the solid frame.
+		jitter_x = _profile_glitch_jitter if int(_profile_fx_time * 60.0) % 2 == 0 else -_profile_glitch_jitter
+		if _profile_glitch_remaining <= 0.0:
+			_schedule_next_profile_glitch()
+	else:
+		_profile_next_glitch_time -= delta
+		if _profile_next_glitch_time <= 0.0:
+			_profile_glitch_remaining = _profile_rng.randf_range(PORTRAIT_GLITCH_DURATION_MIN, PORTRAIT_GLITCH_DURATION_MAX)
+			_profile_glitch_jitter = _profile_rng.randf_range(1.0, 2.8)
+	portrait_fx_clip.position = portrait.position + PORTRAIT_SCANLINE_INSET + Vector2(jitter_x, 0)
+	portrait_scanline_a.position = Vector2(-PORTRAIT_SCANLINE_INSET.x, _profile_scanline_offset - PORTRAIT_SCANLINE_INSET.y)
+	portrait_scanline_b.position = Vector2(-PORTRAIT_SCANLINE_INSET.x, _profile_scanline_offset - PORTRAIT_HEIGHT - PORTRAIT_SCANLINE_INSET.y)
+	var side_tint := Color(0.92, 1.0, 0.98, alpha) if slot == "P1" else Color(1.0, 0.92, 0.98, alpha)
+	portrait_scanline_a.modulate = side_tint
+	portrait_scanline_b.modulate = side_tint
 
 func set_health(value: int, animated: bool = true) -> void:
 	value = clampi(value, 0, max_health)
