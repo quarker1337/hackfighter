@@ -139,6 +139,7 @@ var crouch_phase: String = ""  # "entering", "holding", "exiting"
 
 var shadow_sprite: Sprite2D = null
 var shadow_base_scale: Vector2 = Vector2.ONE
+var shadow_feet_offset_y: float = SHADOW_FEET_OFFSET_Y
 var rim_sprite: AnimatedSprite2D = null
 
 # Debug overlay — created programmatically
@@ -177,14 +178,17 @@ func _apply_character_visuals() -> void:
 			sprite.position = Vector2.ZERO
 			sprite.scale = Vector2(0.78, 0.78)
 			shadow_base_scale = Vector2(0.50, 0.28)
+			shadow_feet_offset_y = SHADOW_FEET_OFFSET_Y
 		"lobster":
-			sprite.position = Vector2(0.0, -4.0)
+			sprite.position = Vector2(0.0, -14.0)
 			sprite.scale = Vector2(0.78, 0.78)
 			shadow_base_scale = Vector2(0.58, 0.30)
+			shadow_feet_offset_y = SHADOW_FEET_OFFSET_Y - 5.0
 		_:
 			sprite.position = Vector2.ZERO
 			sprite.scale = Vector2(1.33333, 1.33333)
 			shadow_base_scale = Vector2(0.62, 0.30)
+			shadow_feet_offset_y = SHADOW_FEET_OFFSET_Y
 	if shadow_sprite:
 		shadow_sprite.scale = shadow_base_scale
 	if rim_sprite:
@@ -252,7 +256,7 @@ func _update_shadow() -> void:
 		height_ratio = clampf((ground_y - position.y) / 120.0, 0.0, 1.0)
 	var scale_drop := lerpf(1.0, SHADOW_MIN_SCALE, height_ratio)
 	shadow_sprite.scale = shadow_base_scale * scale_drop
-	var grounded_shadow_y := ground_y - position.y + SHADOW_FEET_OFFSET_Y if ground_y > 0.0 else SHADOW_FEET_OFFSET_Y
+	var grounded_shadow_y := ground_y - position.y + shadow_feet_offset_y if ground_y > 0.0 else shadow_feet_offset_y
 	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
 	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
