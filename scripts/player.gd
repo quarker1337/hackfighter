@@ -46,9 +46,22 @@ const ANIM_SPEED: Dictionary = {
 	"ko":           6,
 }
 
-# ── Hitbox/Hurtbox constants (from JS config, relative to position = feet center) ──
-# JS hurtbox: { x: -20, y: -80, w: 40, h: 80 }
+# ── Hitbox/Hurtbox constants (relative to position = feet center) ──
+# Default keeps the old JS/Prototype prototype box. Production characters override it below.
 const HURTBOX := Rect2(-20, -80, 40, 80)
+const CHARACTER_HURTBOX: Dictionary = {
+	"teknium": Rect2(-36, -172, 72, 137),
+	"lobster": Rect2(-56, -190, 112, 154),
+}
+
+# Pushbox/body-wall half widths. These are intentionally NOT the full visible sprite
+# width: claws/antennae may extend past the body, but large fighters need more personal
+# space than the old 85px prototype wall or two Lobsters visually interpenetrate.
+const BODY_COLLISION_RADIUS: Dictionary = {
+	"default": 42.5,
+	"teknium": 42.5,
+	"lobster": 70.0,
+}
 
 # JS attackHitbox: relative to fighter center-bottom, facing right
 # Flipped horizontally when facing left
@@ -260,6 +273,28 @@ func _update_shadow() -> void:
 	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
 	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
+func _get_local_attack_hitbox() -> Rect2:
+	if current_attack == "":
+		return Rect2()
+	var base: Rect2 = get_attack_hitbox_data(current_attack)
+	if base.size.x == 0:
+		return Rect2()
+	return base if facing_right else Rect2(-(base.position.x + base.size.x), base.position.y, base.size.x, base.size.y)
+
+func _draw() -> void:
+	if not debug_overlay_enabled:
+		return
+	# AABB debug overlay: green = hurtbox, red = active attack hitbox, white = feet/origin.
+	var hurt := get_hurtbox_data()
+	draw_rect(hurt, Color(0.0, 1.0, 0.2, 0.18), true)
+	draw_rect(hurt, Color(0.0, 1.0, 0.2, 0.95), false, 1.0)
+	var atk := _get_local_attack_hitbox()
+	if atk.size.x > 0.0:
+		draw_rect(atk, Color(1.0, 0.1, 0.05, 0.22), true)
+		draw_rect(atk, Color(1.0, 0.1, 0.05, 0.95), false, 1.0)
+	draw_line(Vector2(-8.0, 0.0), Vector2(8.0, 0.0), Color.WHITE, 1.0)
+	draw_line(Vector2(0.0, -8.0), Vector2(0.0, 8.0), Color.WHITE, 1.0)
+
 func _sync_visual_layers() -> void:
 	if sprite == null:
 		return
@@ -394,11 +429,12 @@ func _physics_process(_delta: float) -> void:
 	# Only stops THIS player. Never pushes the other.
 	if other_player and vel_x != 0.0 and not in_jump:
 		var dist := position.x - other_player.position.x
-		if absf(dist) < 85.0:
+		var min_body_distance := get_body_collision_distance(other_player)
+		if absf(dist) < min_body_distance:
 			if dist > 0:
-				position.x = other_player.position.x + 85.0
+				position.x = other_player.position.x + min_body_distance
 			else:
-				position.x = other_player.position.x - 85.0
+				position.x = other_player.position.x - min_body_distance
 			position.x = clampf(position.x, stage_left_bound, stage_right_bound)
 
 	# ── Jump physics ──────────────────────────────────────────────────
@@ -467,6 +503,8 @@ func _physics_process(_delta: float) -> void:
 
 	_update_debug_overlay()
 	_sync_visual_layers()
+	if debug_overlay_enabled:
+		queue_redraw()
 	_save_prev_ai_input()
 
 # ── Input helpers ─────────────────────────────────────────────────────
@@ -538,6 +576,19 @@ func get_attack_hitbox_data(attack_name: String) -> Rect2:
 		return TEKNIUM_ATTACK_HITBOX[attack_name]
 	return ATTACK_HITBOX.get(attack_name, Rect2())
 
+func get_hurtbox_data() -> Rect2:
+	var key := character_name.to_lower()
+	return CHARACTER_HURTBOX.get(key, HURTBOX)
+
+func get_body_collision_radius() -> float:
+	var key := character_name.to_lower()
+	return BODY_COLLISION_RADIUS.get(key, BODY_COLLISION_RADIUS["default"])
+
+func get_body_collision_distance(other: Player) -> float:
+	if other == null:
+		return get_body_collision_radius() * 2.0
+	return get_body_collision_radius() + other.get_body_collision_radius()
+
 ## Returns the attack hitbox in world coordinates
 func get_attack_hitbox() -> Rect2:
 	if current_attack == "":
@@ -552,7 +603,8 @@ func get_attack_hitbox() -> Rect2:
 
 ## Returns the hurtbox in world coordinates
 func get_hurtbox() -> Rect2:
-	return Rect2(position.x + HURTBOX.position.x, position.y + HURTBOX.position.y, HURTBOX.size.x, HURTBOX.size.y)
+	var hurt := get_hurtbox_data()
+	return Rect2(position.x + hurt.position.x, position.y + hurt.position.y, hurt.size.x, hurt.size.y)
 
 func apply_hitstop(frames: int) -> void:
 	hitstop_frames = maxi(hitstop_frames, frames)
@@ -669,6 +721,7 @@ func set_debug_overlay_enabled(enabled: bool) -> void:
 	debug_overlay_enabled = enabled
 	if debug_overlay:
 		debug_overlay.visible = enabled
+	queue_redraw()
 
 # ── Debug overlay ─────────────────────────────────────────────────────
 
