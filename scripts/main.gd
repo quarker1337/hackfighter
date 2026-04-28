@@ -194,6 +194,9 @@ func _process(delta: float) -> void:
 			if p2:
 				p2.ai_input = {}
 
+			# Ensure combat uses this frame's facing, not a stale pre-contact direction.
+			_update_fighter_facing_and_spacing()
+
 			# Combat processing
 			if p1 and p2:
 				_process_combat(p1, p2)
@@ -230,14 +233,7 @@ func _process(delta: float) -> void:
 			_enter_menu()
 
 	# Auto-facing: players always face each other
-	if p1 and p2:
-		if p1.position.x < p2.position.x:
-			p1.facing_right = true
-			p2.facing_right = false
-		else:
-			p1.facing_right = false
-			p2.facing_right = true
-		_enforce_fighter_separation()
+	_update_fighter_facing_and_spacing()
 
 	# Camera tracking (midpoint between fighters)
 	_apply_camera_tracking(false)
@@ -251,6 +247,17 @@ func _process(delta: float) -> void:
 		debug_timer -= delta
 		if debug_timer <= 0 and debug_label:
 			debug_label.visible = false
+
+func _update_fighter_facing_and_spacing() -> void:
+	if not (p1 and p2):
+		return
+	if p1.position.x < p2.position.x:
+		p1.facing_right = true
+		p2.facing_right = false
+	else:
+		p1.facing_right = false
+		p2.facing_right = true
+	_enforce_fighter_separation()
 
 # ── Combat processing (port of JS combat.js) ──────────────────────────
 

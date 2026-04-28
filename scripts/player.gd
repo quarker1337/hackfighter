@@ -27,6 +27,8 @@ const ATTACKS: Dictionary = {
 const TEKNIUM_ATTACKS: Dictionary = {
 	"heavyPunch":  { "startup": 3,  "active": 5, "recovery": 13, "damage": 80,  "hitstun": 16, "blockstun": 10, "pushback": 4, "type": "mid" },
 	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7,  "pushback": 3, "type": "mid" },
+	# Teknium's asset is a high/roundhouse-style kick, not the old Prototype low sweep.
+	"heavyKick":   { "startup": 7,  "active": 4, "recovery": 14, "damage": 100, "hitstun": 20, "blockstun": 12, "pushback": 5, "type": "mid", "knockdown": true },
 }
 
 # ── Animation speeds (JS frames per sprite-frame) ────────────────────
@@ -75,7 +77,9 @@ const ATTACK_HITBOX: Dictionary = {
 const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 	"heavyPunch":  Rect2(8, -68, 68, 24),
 	"lightKick":   Rect2(-6, -52, 78, 28),
-	"heavyKick":   Rect2(-2, -34, 84, 26),
+	# Teknium uses a high-kick sheet; keep the box around the raised leg/torso line
+	# instead of the inherited low sweep box, which slipped under standing hurtboxes.
+	"heavyKick":   Rect2(4, -112, 98, 44),
 }
 
 # ── Knockdown / getting up timings (from JS config) ──────────────────
