@@ -17,6 +17,7 @@ enum AppState { MENU, FIGHTER_SELECT, CONTROLS, OPTIONS, GAME }
 var app_state: AppState = AppState.MENU
 var menu_index: int = 0
 var fighter_select_index: int = 0
+var fighter_select_side: int = 0  # 0 = P1, 1 = CPU/P2
 var option_index: int = 0
 var option_difficulty_index: int = 1
 var option_sfx_volume: int = 60
@@ -25,7 +26,8 @@ var option_radio_index: int = 0
 const CPU_DIFFICULTIES := ["EASY", "NORMAL", "HARD"]
 const OPTION_COUNT := 4
 const FIGHTER_PLACEHOLDERS := ["TEKNIUM", "NOUSGIRL", "LOBSTER"]
-var selected_fighter_name: String = "TEKNIUM"
+var selected_p1_fighter_name: String = "TEKNIUM"
+var selected_p2_fighter_name: String = "TEKNIUM"
 
 enum RoundState { PLAYING, ROUND_OVER, MATCH_OVER }
 var round_state: RoundState = RoundState.PLAYING
@@ -521,13 +523,13 @@ func _start_match() -> void:
 	_hide_result_panel()
 	_set_game_hud_visible(true)
 	if p1:
-		p1.set_character(selected_fighter_name)
+		p1.set_character(selected_p1_fighter_name)
 	if p2:
-		p2.set_character("Teknium")
+		p2.set_character(selected_p2_fighter_name)
 	if p1_health_widget and p1_health_widget.has_method("configure"):
-		p1_health_widget.configure(selected_fighter_name, "P1")
+		p1_health_widget.configure(selected_p1_fighter_name, "P1")
 	if p2_health_widget and p2_health_widget.has_method("configure"):
-		p2_health_widget.configure("TEKNIUM", "AI")
+		p2_health_widget.configure(selected_p2_fighter_name, "AI")
 	current_round = 1
 	p1_round_wins = 0
 	p2_round_wins = 0
@@ -569,6 +571,7 @@ func _enter_menu() -> void:
 	app_state = AppState.MENU
 	menu_index = 0
 	fighter_select_index = 0
+	fighter_select_side = 0
 	option_index = 0
 	intro_active = false
 	intro_token += 1
@@ -599,18 +602,35 @@ func _process_menu_input() -> void:
 				match menu_index:
 					0:
 						app_state = AppState.FIGHTER_SELECT
+						fighter_select_side = 0
+						fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p1_fighter_name)
+						if fighter_select_index < 0:
+							fighter_select_index = 0
 					1:
 						app_state = AppState.CONTROLS
 					2:
 						app_state = AppState.OPTIONS
 		AppState.FIGHTER_SELECT:
-			if Input.is_action_just_pressed("p1_up"):
+			if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p1_right"):
+				fighter_select_side = 1 - fighter_select_side
+				fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name if fighter_select_side == 1 else selected_p1_fighter_name)
+				if fighter_select_index < 0:
+					fighter_select_index = 0
+			elif Input.is_action_just_pressed("p1_up"):
 				fighter_select_index = posmod(fighter_select_index - 1, FIGHTER_PLACEHOLDERS.size())
+				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
 			elif Input.is_action_just_pressed("p1_down"):
 				fighter_select_index = posmod(fighter_select_index + 1, FIGHTER_PLACEHOLDERS.size())
+				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
 			elif Input.is_action_just_pressed("p1_start"):
-				selected_fighter_name = FIGHTER_PLACEHOLDERS[fighter_select_index]
-				_start_match()
+				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
+				if fighter_select_side == 0:
+					fighter_select_side = 1
+					fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name)
+					if fighter_select_index < 0:
+						fighter_select_index = 0
+				else:
+					_start_match()
 			elif Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
 		AppState.CONTROLS:
@@ -627,6 +647,12 @@ func _process_menu_input() -> void:
 				_adjust_option(1)
 			elif Input.is_action_just_pressed("p1_start") or Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
+
+func _set_selected_fighter_for_side(fighter_name: String) -> void:
+	if fighter_select_side == 0:
+		selected_p1_fighter_name = fighter_name
+	else:
+		selected_p2_fighter_name = fighter_name
 
 func _adjust_option(delta: int) -> void:
 	match option_index:
@@ -808,15 +834,27 @@ func _update_menu_ui() -> void:
 		AppState.FIGHTER_SELECT:
 			menu_title_label.text = "FIGHTER SELECT"
 			menu_body_label.text = ""
-			fighter_select_desc_label.text = "Select an operative. Lobster has starter idle/walk/hurt sheets wired in."
+			var active_side_label := "P1" if fighter_select_side == 0 else "AI/P2"
+			fighter_select_desc_label.text = "Choosing %s     P1:%s   AI:%s" % [active_side_label, selected_p1_fighter_name, selected_p2_fighter_name]
 			for i in range(FIGHTER_PLACEHOLDERS.size()):
-				var selected := i == fighter_select_index
-				fighter_card_backs[i].color = Color(0.0, 0.85, 0.72, 0.36 if selected else 0.18)
-				fighter_card_fills[i].color = Color(0.08, 0.13, 0.18, 1.0) if selected else Color(0.05, 0.08, 0.11, 0.98)
-				fighter_card_labels[i].modulate = Color(0.98, 1.0, 1.0, 1.0) if selected else Color(0.82, 0.9, 0.95, 0.92)
-				fighter_card_tags[i].text = "STARTER\nASSETS" if FIGHTER_PLACEHOLDERS[i] == "LOBSTER" else "PLACEHOLDER\nASSET SLOT"
-				fighter_card_tags[i].modulate = Color(0.55, 0.92, 0.88, 1.0) if selected else Color(0.40, 0.68, 0.76, 0.88)
-			menu_hint_label.text = "NAV: W/S   CONFIRM: ENTER   BACK: U/J"
+				var fighter_name: String = FIGHTER_PLACEHOLDERS[i]
+				var cursor_here: bool = i == fighter_select_index
+				var p1_here: bool = fighter_name == selected_p1_fighter_name
+				var p2_here: bool = fighter_name == selected_p2_fighter_name
+				var active_pick_here: bool = (fighter_select_side == 0 and p1_here) or (fighter_select_side == 1 and p2_here)
+				fighter_card_backs[i].color = Color(0.0, 0.85, 0.72, 0.42 if active_pick_here else (0.30 if cursor_here else 0.16))
+				fighter_card_fills[i].color = Color(0.08, 0.13, 0.18, 1.0) if active_pick_here else Color(0.05, 0.08, 0.11, 0.98)
+				fighter_card_labels[i].modulate = Color(0.98, 1.0, 1.0, 1.0) if active_pick_here else Color(0.82, 0.9, 0.95, 0.92)
+				var badges: Array[String] = []
+				if p1_here:
+					badges.append("P1")
+				if p2_here:
+					badges.append("AI")
+				if badges.is_empty():
+					badges.append("STARTER" if fighter_name == "LOBSTER" else "SLOT")
+				fighter_card_tags[i].text = "/".join(badges) + "\n" + ("ACTIVE" if active_pick_here else ("CURSOR" if cursor_here else "READY"))
+				fighter_card_tags[i].modulate = Color(0.55, 0.92, 0.88, 1.0) if active_pick_here else Color(0.40, 0.68, 0.76, 0.88)
+			menu_hint_label.text = "PICK: W/S   SIDE: A/D   ENTER: CONFIRM/NEXT   BACK: U/J"
 		AppState.CONTROLS:
 			menu_title_label.text = "CONTROL MAP"
 			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
