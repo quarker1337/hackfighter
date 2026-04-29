@@ -79,7 +79,8 @@ const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 	"lightKick":   Rect2(-6, -52, 78, 28),
 	# Teknium uses a high-kick sheet; keep the box around the raised leg/torso line
 	# instead of the inherited low sweep box, which slipped under standing hurtboxes.
-	"heavyKick":   Rect2(4, -112, 98, 44),
+	# Front reach is trimmed so it does not connect on Lobster's extended claw pixels.
+	"heavyKick":   Rect2(4, -112, 82, 44),
 }
 
 # ── Knockdown / getting up timings (from JS config) ──────────────────
