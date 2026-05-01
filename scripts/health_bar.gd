@@ -170,7 +170,7 @@ func _apply_assets() -> void:
 	portrait_ring.texture = load("res://assets/ui/hero_profile_top%s.png" % suffix)
 	portrait_ring.visible = true
 	portrait_ring.z_index = 3
-	portrait.texture = load("res://assets/ui/hero_profile%s.png" % suffix)
+	portrait.texture = load(_hero_profile_path(hero_name, suffix))
 	portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	# UI profile art is authored higher than the logical slot so downscaling can
@@ -331,6 +331,13 @@ func _hero_fill_colors(name: String) -> Array[Color]:
 			return [Color(0.72, 0.26, 1.34, 1.0), Color(1.02, 0.72, 1.42, 1.0)]
 		_:
 			return [Color(0.25, 1.25, 0.20, 1.0), Color(0.82, 1.45, 0.62, 1.0)]
+
+func _hero_profile_path(name: String, suffix: String) -> String:
+	match name.to_upper():
+		"LOBSTER":
+			return "res://assets/ui/hero_profile_lobster%s.png" % suffix
+		_:
+			return "res://assets/ui/hero_profile%s.png" % suffix
 
 func _load_portrait_texture(name: String) -> Texture2D:
 	match name.to_upper():
