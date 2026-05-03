@@ -26,6 +26,7 @@ var option_radio_index: int = 0
 const CPU_DIFFICULTIES := ["EASY", "NORMAL", "HARD"]
 const OPTION_COUNT := 4
 const FIGHTER_PLACEHOLDERS := ["TEKNIUM", "NOUSGIRL", "LOBSTER"]
+const LOCKED_FIGHTERS := ["NOUSGIRL"]
 var selected_p1_fighter_name: String = "TEKNIUM"
 var selected_p2_fighter_name: String = "TEKNIUM"
 
@@ -50,6 +51,7 @@ const HITSTOP_ON_BLOCK: int = 3
 ## HealthBar.gd renders labels like P1 — TEKNIUM and AI — TEKNIUM.
 const HEALTH_BAR_SCENE := preload("res://scenes/HealthBar.tscn")
 const HUD_FONT := preload("res://fonts/DejaVuSansMono.ttf")
+const JP_UI_FONT := preload("res://fonts/IPAGothic.ttf")
 var hud_layer: CanvasLayer = null
 var hud_root: Control = null
 var p1_health_widget: Control = null
@@ -66,18 +68,25 @@ var result_status_label: Label = null
 var result_winner_label: Label = null
 var result_prompt_label: Label = null
 var menu_overlay: ColorRect = null
-var menu_panel_back: ColorRect = null
-var menu_panel: ColorRect = null
+var menu_panel_back: Panel = null
+var menu_panel: Panel = null
 var menu_scanlines: Array[ColorRect] = []
+var menu_global_scanlines: Array[ColorRect] = []
+var menu_crt_overlay: ColorRect = null
 var menu_title_label: Label = null
 var menu_subtitle_label: Label = null
 var menu_body_label: Label = null
 var menu_hint_label: Label = null
-var fighter_card_backs: Array[ColorRect] = []
-var fighter_card_fills: Array[ColorRect] = []
+var fighter_card_backs: Array[Panel] = []
+var fighter_card_fills: Array[Panel] = []
+var fighter_card_portrait_frames: Array[Panel] = []
+var fighter_card_portraits: Array[TextureRect] = []
 var fighter_card_labels: Array[Label] = []
 var fighter_card_tags: Array[Label] = []
 var fighter_select_desc_label: Label = null
+var start_banner_panel: Panel = null
+var start_banner_label: Label = null
+var start_banner_timer: float = 0.0
 var menu_fx_time: float = 0.0
 var p1_round_dots: Array[ColorRect] = []
 var p2_round_dots: Array[ColorRect] = []
@@ -173,6 +182,7 @@ func _process(delta: float) -> void:
 	_update_camera_fx(delta)
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
+	_update_start_banner(delta)
 	if app_state != AppState.GAME:
 		menu_fx_time += delta
 		_process_menu_input()
@@ -544,6 +554,7 @@ func _start_match() -> void:
 		ai.set_difficulty(CPU_DIFFICULTIES[option_difficulty_index])
 		ai.reset()
 	_update_round_dots()
+	_play_start_banner()
 	_start_next_round(true)
 
 func _hide_result_panel() -> void:
@@ -587,6 +598,11 @@ func _enter_menu() -> void:
 	_hide_result_panel()
 	if announcement_label:
 		announcement_label.visible = false
+	start_banner_timer = 0.0
+	if start_banner_panel:
+		start_banner_panel.visible = false
+	if start_banner_label:
+		start_banner_label.visible = false
 	_set_game_hud_visible(false)
 	if p1:
 		p1.control_enabled = false
@@ -621,21 +637,21 @@ func _process_menu_input() -> void:
 			if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p1_right"):
 				fighter_select_side = 1 - fighter_select_side
 				fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name if fighter_select_side == 1 else selected_p1_fighter_name)
-				if fighter_select_index < 0:
-					fighter_select_index = 0
+				if fighter_select_index < 0 or _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
+					fighter_select_index = _first_unlocked_fighter_index()
 			elif Input.is_action_just_pressed("p1_up"):
-				fighter_select_index = posmod(fighter_select_index - 1, FIGHTER_PLACEHOLDERS.size())
-				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
+				_step_fighter_select(-1)
 			elif Input.is_action_just_pressed("p1_down"):
-				fighter_select_index = posmod(fighter_select_index + 1, FIGHTER_PLACEHOLDERS.size())
-				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
+				_step_fighter_select(1)
 			elif Input.is_action_just_pressed("p1_start"):
+				if _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
+					fighter_select_index = _first_unlocked_fighter_index()
 				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
 				if fighter_select_side == 0:
 					fighter_select_side = 1
 					fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name)
-					if fighter_select_index < 0:
-						fighter_select_index = 0
+					if fighter_select_index < 0 or _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
+						fighter_select_index = _first_unlocked_fighter_index()
 				else:
 					_start_match()
 			elif Input.is_action_just_pressed("p1_punch_light"):
@@ -655,7 +671,30 @@ func _process_menu_input() -> void:
 			elif Input.is_action_just_pressed("p1_start") or Input.is_action_just_pressed("p1_punch_light"):
 				app_state = AppState.MENU
 
+func _is_fighter_locked(fighter_name: String) -> bool:
+	return LOCKED_FIGHTERS.has(fighter_name)
+
+func _first_unlocked_fighter_index() -> int:
+	for i in range(FIGHTER_PLACEHOLDERS.size()):
+		if not _is_fighter_locked(FIGHTER_PLACEHOLDERS[i]):
+			return i
+	return 0
+
+func _step_fighter_select(delta: int) -> void:
+	if FIGHTER_PLACEHOLDERS.is_empty():
+		fighter_select_index = 0
+		return
+	for _attempt in range(FIGHTER_PLACEHOLDERS.size()):
+		fighter_select_index = posmod(fighter_select_index + delta, FIGHTER_PLACEHOLDERS.size())
+		var fighter_name: String = FIGHTER_PLACEHOLDERS[fighter_select_index]
+		if not _is_fighter_locked(fighter_name):
+			_set_selected_fighter_for_side(fighter_name)
+			return
+	fighter_select_index = 0
+
 func _set_selected_fighter_for_side(fighter_name: String) -> void:
+	if _is_fighter_locked(fighter_name):
+		return
 	if fighter_select_side == 0:
 		selected_p1_fighter_name = fighter_name
 	else:
@@ -696,6 +735,33 @@ func _ui_add_child(node: Node) -> void:
 		_ensure_hud_layer()
 	hud_root.add_child(node)
 
+func _make_panel(pos: Vector2, panel_size: Vector2, fill_color: Color, border_color: Color, border_width: int = 1, radius: int = 8) -> Panel:
+	var panel := Panel.new()
+	panel.position = pos
+	panel.size = panel_size
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill_color
+	style.border_color = border_color
+	style.border_width_left = border_width
+	style.border_width_top = border_width
+	style.border_width_right = border_width
+	style.border_width_bottom = border_width
+	style.corner_radius_top_left = radius
+	style.corner_radius_top_right = radius
+	style.corner_radius_bottom_left = radius
+	style.corner_radius_bottom_right = radius
+	panel.add_theme_stylebox_override("panel", style)
+	return panel
+
+func _set_panel_colors(panel: Panel, fill_color: Color, border_color: Color) -> void:
+	if not panel:
+		return
+	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	if style:
+		style.bg_color = fill_color
+		style.border_color = border_color
+
 func _create_menu_ui() -> void:
 	menu_overlay = ColorRect.new()
 	menu_overlay.position = Vector2.ZERO
@@ -703,16 +769,10 @@ func _create_menu_ui() -> void:
 	menu_overlay.color = Color(0.01, 0.02, 0.03, 1.0)
 	_ui_add_child(menu_overlay)
 
-	menu_panel_back = ColorRect.new()
-	menu_panel_back.position = Vector2(56, 26)
-	menu_panel_back.size = Vector2(400, 232)
-	menu_panel_back.color = Color(0.0, 0.85, 0.72, 0.28)
+	menu_panel_back = _make_panel(Vector2(54, 24), Vector2(404, 236), Color(0.0, 0.85, 0.72, 0.18), Color(0.0, 0.95, 0.82, 0.34), 2, 13)
 	_ui_add_child(menu_panel_back)
 
-	menu_panel = ColorRect.new()
-	menu_panel.position = Vector2(58, 28)
-	menu_panel.size = Vector2(396, 228)
-	menu_panel.color = Color(0.03, 0.05, 0.08, 0.96)
+	menu_panel = _make_panel(Vector2(58, 28), Vector2(396, 228), Color(0.03, 0.05, 0.08, 0.96), Color(0.08, 0.42, 0.48, 0.65), 1, 11)
 	_ui_add_child(menu_panel)
 
 	menu_title_label = Label.new()
@@ -727,8 +787,9 @@ func _create_menu_ui() -> void:
 	menu_subtitle_label.position = Vector2(84, 68)
 	menu_subtitle_label.size = Vector2(344, 20)
 	menu_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	menu_subtitle_label.add_theme_font_override("font", JP_UI_FONT)
 	menu_subtitle_label.add_theme_font_size_override("font_size", 11)
-	menu_subtitle_label.add_theme_color_override("font_color", Color(0.28, 0.95, 0.85))
+	menu_subtitle_label.add_theme_color_override("font_color", Color(0.42, 0.76, 0.78))
 	_ui_add_child(menu_subtitle_label)
 
 	menu_body_label = Label.new()
@@ -736,51 +797,63 @@ func _create_menu_ui() -> void:
 	menu_body_label.size = Vector2(328, 106)
 	menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	menu_body_label.add_theme_font_override("font", JP_UI_FONT)
 	menu_body_label.add_theme_font_size_override("font_size", 15)
 	menu_body_label.add_theme_color_override("font_color", Color(0.86, 0.94, 0.98))
 	_ui_add_child(menu_body_label)
 
 	for i in range(FIGHTER_PLACEHOLDERS.size()):
 		var x := 82 + i * 116
-		var back := ColorRect.new()
-		back.position = Vector2(x, 102)
-		back.size = Vector2(104, 86)
-		back.color = Color(0.0, 0.85, 0.72, 0.22)
+		var back := _make_panel(Vector2(x, 100), Vector2(104, 94), Color(0.0, 0.85, 0.72, 0.14), Color(0.0, 0.95, 0.82, 0.30), 2, 8)
 		_ui_add_child(back)
 		fighter_card_backs.append(back)
 
-		var fill := ColorRect.new()
-		fill.position = Vector2(x + 2, 104)
-		fill.size = Vector2(100, 82)
-		fill.color = Color(0.06, 0.09, 0.13, 0.98)
+		var fill := _make_panel(Vector2(x + 2, 102), Vector2(100, 90), Color(0.06, 0.09, 0.13, 0.98), Color(0.10, 0.36, 0.42, 0.45), 1, 7)
 		_ui_add_child(fill)
 		fighter_card_fills.append(fill)
 
 		var label := Label.new()
-		label.position = Vector2(x + 8, 116)
-		label.size = Vector2(88, 20)
+		label.position = Vector2(x + 8, 106)
+		label.size = Vector2(88, 16)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.add_theme_font_size_override("font_size", 13)
+		label.add_theme_font_size_override("font_size", 12)
 		label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 		label.text = FIGHTER_PLACEHOLDERS[i]
 		_ui_add_child(label)
 		fighter_card_labels.append(label)
 
+		var portrait_frame := _make_panel(Vector2(x + 28, 124), Vector2(48, 48), Color(0.02, 0.09, 0.11, 0.82), Color(0.0, 0.95, 0.82, 0.58), 2, 8)
+		_ui_add_child(portrait_frame)
+		fighter_card_portrait_frames.append(portrait_frame)
+
+		var portrait := TextureRect.new()
+		portrait.position = Vector2(x + 30, 126)
+		portrait.size = Vector2(44, 44)
+		portrait.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		portrait.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		portrait.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		portrait.texture = _get_fighter_select_portrait(FIGHTER_PLACEHOLDERS[i])
+		portrait.modulate = Color(1.0, 1.0, 1.0, 0.96) if portrait.texture else Color(0.05, 0.85, 0.75, 0.18)
+		_ui_add_child(portrait)
+		fighter_card_portraits.append(portrait)
+
 		var tag := Label.new()
-		tag.position = Vector2(x + 8, 145)
-		tag.size = Vector2(88, 26)
+		tag.position = Vector2(x + 6, 175)
+		tag.size = Vector2(92, 12)
 		tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		tag.add_theme_font_size_override("font_size", 10)
+		tag.add_theme_font_override("font", JP_UI_FONT)
+		tag.add_theme_font_size_override("font_size", 8)
 		tag.add_theme_color_override("font_color", Color(0.45, 0.75, 0.82))
-		tag.text = "PLACEHOLDER\nASSET SLOT"
+		tag.text = "PLACEHOLDER"
 		_ui_add_child(tag)
 		fighter_card_tags.append(tag)
 
 	fighter_select_desc_label = Label.new()
-	fighter_select_desc_label.position = Vector2(90, 196)
+	fighter_select_desc_label.position = Vector2(90, 199)
 	fighter_select_desc_label.size = Vector2(332, 30)
 	fighter_select_desc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	fighter_select_desc_label.add_theme_font_override("font", JP_UI_FONT)
 	fighter_select_desc_label.add_theme_font_size_override("font_size", 10)
 	fighter_select_desc_label.add_theme_color_override("font_color", Color(0.45, 0.75, 0.82))
 	_ui_add_child(fighter_select_desc_label)
@@ -801,6 +874,78 @@ func _create_menu_ui() -> void:
 		_ui_add_child(line)
 		menu_scanlines.append(line)
 
+	# Coarse local panel lines stay very subtle; the actual CRT treatment is the
+	# full-screen shader overlay below. Plain ColorRect stripes looked like UI
+	# rulers rather than a capture-through-a-monitor scanline effect.
+	for i in range(72):
+		var global_line := ColorRect.new()
+		global_line.position = Vector2(0, i * 4)
+		global_line.size = Vector2(SCREEN_WIDTH, 1)
+		global_line.color = Color(0.0, 0.0, 0.0, 0.035)
+		_ui_add_child(global_line)
+		menu_global_scanlines.append(global_line)
+
+	start_banner_panel = _make_panel(Vector2(-360, 118), Vector2(360, 50), Color(0.02, 0.09, 0.11, 0.92), Color(0.0, 0.95, 0.82, 0.86), 2, 10)
+	start_banner_panel.visible = false
+	_ui_add_child(start_banner_panel)
+
+	start_banner_label = Label.new()
+	start_banner_label.position = Vector2(-346, 130)
+	start_banner_label.size = Vector2(332, 24)
+	start_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	start_banner_label.add_theme_font_size_override("font_size", 18)
+	start_banner_label.add_theme_color_override("font_color", Color(0.88, 1.0, 0.96))
+	start_banner_label.text = "SIMULATION BOOT // ENGAGE"
+	start_banner_label.visible = false
+	_ui_add_child(start_banner_label)
+
+	menu_crt_overlay = ColorRect.new()
+	menu_crt_overlay.name = "MenuCRTScanlineOverlay"
+	menu_crt_overlay.position = Vector2.ZERO
+	menu_crt_overlay.size = Vector2(SCREEN_WIDTH, SCREEN_HEIGHT)
+	menu_crt_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var crt_shader := Shader.new()
+	crt_shader.code = """
+shader_type canvas_item;
+render_mode blend_mix, unshaded;
+
+uniform float time_offset = 0.0;
+uniform float dark_strength = 0.22;
+uniform float glow_strength = 0.040;
+uniform float vignette_strength = 0.16;
+
+void fragment() {
+	vec2 p = FRAGCOORD.xy;
+	float row = mod(floor(p.y), 4.0);
+	float dark_row = 1.0 - step(2.0, row);
+	float phosphor_row = 1.0 - abs(fract(p.y * 0.5) * 2.0 - 1.0);
+	float roll = 0.5 + 0.5 * sin((p.y * 0.085) + time_offset * 3.1);
+	float flicker = 0.5 + 0.5 * sin(time_offset * 17.0 + p.y * 0.012);
+	float rgb_mask = step(0.58, fract(p.x / 3.0));
+	float dist = distance(UV, vec2(0.5, 0.52));
+	float vignette = smoothstep(0.34, 0.76, dist);
+	float alpha = dark_row * (dark_strength + roll * 0.035 + flicker * 0.018);
+	alpha += phosphor_row * glow_strength;
+	alpha += rgb_mask * 0.018;
+	alpha += vignette * vignette_strength;
+	vec3 tint = mix(vec3(0.0, 0.012, 0.018), vec3(0.0, 0.20, 0.18), phosphor_row * 0.18);
+	COLOR = vec4(tint, clamp(alpha, 0.0, 0.42));
+}
+"""
+	var crt_mat := ShaderMaterial.new()
+	crt_mat.shader = crt_shader
+	menu_crt_overlay.material = crt_mat
+	_ui_add_child(menu_crt_overlay)
+
+func _get_fighter_select_portrait(fighter_name: String) -> Texture2D:
+	match fighter_name:
+		"TEKNIUM":
+			return load("res://assets/ui/hero_profile.png") as Texture2D
+		"LOBSTER":
+			return load("res://assets/ui/hero_profile_lobster.png") as Texture2D
+		_:
+			return null
+
 func _update_menu_ui() -> void:
 	var visible := app_state != AppState.GAME
 	if menu_overlay: menu_overlay.visible = visible
@@ -808,8 +953,11 @@ func _update_menu_ui() -> void:
 	if menu_panel: menu_panel.visible = visible
 	for line in menu_scanlines:
 		if line: line.visible = visible
+	for line in menu_global_scanlines:
+		if line: line.visible = visible
+	if menu_crt_overlay: menu_crt_overlay.visible = visible
 	if menu_title_label: menu_title_label.visible = visible
-	if menu_subtitle_label: menu_subtitle_label.visible = visible
+	if menu_subtitle_label: menu_subtitle_label.visible = visible and (app_state == AppState.MENU or app_state == AppState.FIGHTER_SELECT)
 	if menu_body_label: menu_body_label.visible = visible
 	if menu_hint_label: menu_hint_label.visible = visible
 	if fighter_select_desc_label: fighter_select_desc_label.visible = visible and app_state == AppState.FIGHTER_SELECT
@@ -817,50 +965,76 @@ func _update_menu_ui() -> void:
 		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
 	for node in fighter_card_fills:
 		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
+	for node in fighter_card_portrait_frames:
+		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
+	for node in fighter_card_portraits:
+		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
 	for node in fighter_card_labels:
 		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
 	for node in fighter_card_tags:
 		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
 	if not visible:
 		return
-	menu_subtitle_label.text = "teknium // nous research // combat sandbox"
+	menu_subtitle_label.text = "ハックファイター"
 	menu_body_label.position = Vector2(92, 102)
 	menu_body_label.size = Vector2(328, 106)
 	menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	menu_body_label.add_theme_font_size_override("font_size", 15)
+	menu_body_label.add_theme_color_override("font_color", Color(0.84, 0.90, 0.92))
 	match app_state:
 		AppState.MENU:
-			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+			menu_body_label.position = Vector2(106, 104)
+			menu_body_label.size = Vector2(300, 96)
+			menu_body_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			menu_title_label.text = "HACKFIGHTER"
 			var items := ["START SIMULATION", "CONTROL MAP", "SYSTEM OPTIONS"]
 			var lines: Array[String] = []
 			for i in range(items.size()):
-				lines.append(("[>] " if i == menu_index else "[ ] ") + items[i])
+				lines.append(("「 %s 」" % items[i]) if i == menu_index else items[i])
 			menu_body_label.text = "\n".join(lines)
 			menu_hint_label.text = "NAV: W/S   CONFIRM: ENTER"
 		AppState.FIGHTER_SELECT:
 			menu_title_label.text = "FIGHTER SELECT"
+			menu_subtitle_label.text = "戦士選択"
 			menu_body_label.text = ""
 			var active_side_label := "P1" if fighter_select_side == 0 else "AI/P2"
-			fighter_select_desc_label.text = "Choosing %s     P1:%s   AI:%s" % [active_side_label, selected_p1_fighter_name, selected_p2_fighter_name]
+			fighter_select_desc_label.text = "選択中 %s     P1:%s   AI:%s" % [active_side_label, selected_p1_fighter_name, selected_p2_fighter_name]
+			fighter_select_desc_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.90))
 			for i in range(FIGHTER_PLACEHOLDERS.size()):
 				var fighter_name: String = FIGHTER_PLACEHOLDERS[i]
+				var locked := _is_fighter_locked(fighter_name)
 				var cursor_here: bool = i == fighter_select_index
 				var p1_here: bool = fighter_name == selected_p1_fighter_name
 				var p2_here: bool = fighter_name == selected_p2_fighter_name
-				var active_pick_here: bool = (fighter_select_side == 0 and p1_here) or (fighter_select_side == 1 and p2_here)
-				fighter_card_backs[i].color = Color(0.0, 0.85, 0.72, 0.42 if active_pick_here else (0.30 if cursor_here else 0.16))
-				fighter_card_fills[i].color = Color(0.08, 0.13, 0.18, 1.0) if active_pick_here else Color(0.05, 0.08, 0.11, 0.98)
-				fighter_card_labels[i].modulate = Color(0.98, 1.0, 1.0, 1.0) if active_pick_here else Color(0.82, 0.9, 0.95, 0.92)
+				var active_pick_here: bool = not locked and ((fighter_select_side == 0 and p1_here) or (fighter_select_side == 1 and p2_here))
+				if locked:
+					_set_panel_colors(fighter_card_backs[i], Color(0.08, 0.09, 0.10, 0.42), Color(0.40, 0.48, 0.50, 0.24))
+					_set_panel_colors(fighter_card_fills[i], Color(0.025, 0.03, 0.04, 0.94), Color(0.24, 0.30, 0.32, 0.28))
+					_set_panel_colors(fighter_card_portrait_frames[i], Color(0.02, 0.025, 0.03, 0.72), Color(0.42, 0.48, 0.50, 0.22))
+				else:
+					var active_border := Color(0.0, 0.95, 0.82, 0.78 if active_pick_here else (0.58 if cursor_here else 0.30))
+					_set_panel_colors(fighter_card_backs[i], Color(0.0, 0.85, 0.72, 0.18 if active_pick_here else (0.13 if cursor_here else 0.08)), active_border)
+					_set_panel_colors(fighter_card_fills[i], Color(0.08, 0.13, 0.18, 1.0) if active_pick_here else Color(0.05, 0.08, 0.11, 0.98), Color(0.10, 0.36, 0.42, 0.56 if cursor_here else 0.36))
+					_set_panel_colors(fighter_card_portrait_frames[i], Color(0.02, 0.09, 0.11, 0.88), active_border)
+				fighter_card_labels[i].modulate = Color(0.92, 0.96, 0.98, 1.0) if active_pick_here else (Color(0.46, 0.52, 0.54, 0.62) if locked else Color(0.78, 0.84, 0.88, 0.92))
+				var portrait_alpha := 0.12 if locked else (1.0 if active_pick_here else (0.88 if cursor_here else 0.68))
+				if fighter_card_portraits[i].texture:
+					fighter_card_portraits[i].modulate = Color(1.0, 1.0, 1.0, portrait_alpha)
+				else:
+					fighter_card_portraits[i].modulate = Color(0.46, 0.52, 0.54, 0.10) if locked else Color(0.05, 0.85, 0.75, 0.18 if cursor_here else 0.10)
 				var badges: Array[String] = []
+				if locked:
+					fighter_card_tags[i].text = "未実装"
+					fighter_card_tags[i].modulate = Color(0.54, 0.60, 0.62, 0.78)
+					continue
 				if p1_here:
 					badges.append("P1")
 				if p2_here:
 					badges.append("AI")
 				if badges.is_empty():
 					badges.append("STARTER" if fighter_name == "LOBSTER" else "SLOT")
-				fighter_card_tags[i].text = "/".join(badges) + "\n" + ("ACTIVE" if active_pick_here else ("CURSOR" if cursor_here else "READY"))
-				fighter_card_tags[i].modulate = Color(0.55, 0.92, 0.88, 1.0) if active_pick_here else Color(0.40, 0.68, 0.76, 0.88)
+				fighter_card_tags[i].text = "/".join(badges) + " • " + ("ACTIVE" if active_pick_here else ("CURSOR" if cursor_here else "READY"))
+				fighter_card_tags[i].modulate = Color(0.86, 0.92, 0.94, 1.0) if active_pick_here else Color(0.66, 0.74, 0.78, 0.88)
 			menu_hint_label.text = "PICK: W/S   SIDE: A/D   ENTER: CONFIRM/NEXT   BACK: U/J"
 		AppState.CONTROLS:
 			menu_title_label.text = "CONTROL MAP"
@@ -893,7 +1067,7 @@ func _update_menu_ui() -> void:
 func _animate_menu_ui() -> void:
 	var pulse := 0.22 + 0.06 * sin(menu_fx_time * 1.9)
 	if menu_panel_back:
-		menu_panel_back.color = Color(0.0, 0.85, 0.72, pulse)
+		_set_panel_colors(menu_panel_back, Color(0.0, 0.85, 0.72, pulse * 0.72), Color(0.0, 0.95, 0.82, 0.28 + pulse))
 	if menu_title_label:
 		var glow := 0.92 + 0.08 * sin(menu_fx_time * 2.7)
 		menu_title_label.modulate = Color(glow, glow + 0.03, glow + 0.05, 1.0)
@@ -905,6 +1079,38 @@ func _animate_menu_ui() -> void:
 		var line := menu_scanlines[i]
 		if line:
 			line.modulate.a = 0.025 + 0.035 * (0.5 + 0.5 * sin(menu_fx_time * 3.2 + float(i) * 0.45))
+	for i in range(menu_global_scanlines.size()):
+		var global_line := menu_global_scanlines[i]
+		if global_line:
+			global_line.modulate.a = 0.025 + 0.02 * (0.5 + 0.5 * sin(menu_fx_time * 2.4 + float(i) * 0.22))
+	if menu_crt_overlay and menu_crt_overlay.material is ShaderMaterial:
+		(menu_crt_overlay.material as ShaderMaterial).set_shader_parameter("time_offset", menu_fx_time)
+
+func _play_start_banner() -> void:
+	if not (start_banner_panel and start_banner_label):
+		return
+	start_banner_timer = 1.35
+	start_banner_panel.visible = true
+	start_banner_label.visible = true
+	_update_start_banner(0.0)
+
+func _update_start_banner(delta: float) -> void:
+	if not (start_banner_panel and start_banner_label):
+		return
+	if start_banner_timer <= 0.0:
+		return
+	start_banner_timer = maxf(0.0, start_banner_timer - delta)
+	var elapsed := 1.35 - start_banner_timer
+	var slide := clampf(elapsed / 0.22, 0.0, 1.0)
+	var fade := clampf(start_banner_timer / 0.25, 0.0, 1.0)
+	var x := lerpf(-360.0, 76.0, 1.0 - pow(1.0 - slide, 3.0))
+	start_banner_panel.position = Vector2(x, 118)
+	start_banner_label.position = Vector2(x + 14.0, 130)
+	start_banner_panel.modulate = Color(1, 1, 1, fade)
+	start_banner_label.modulate = Color(1, 1, 1, fade)
+	if start_banner_timer <= 0.0:
+		start_banner_panel.visible = false
+		start_banner_label.visible = false
 
 func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
