@@ -17,6 +17,7 @@ extends Control
 var portrait_fx_clip: Control = null
 var portrait_scanline_a: TextureRect = null
 var portrait_scanline_b: TextureRect = null
+var special_fire: ColorRect = null
 
 const SIDE_P1_ACCENT := Color(0.24, 1.18, 1.06, 1.0) # #3FF6E0 with bloom headroom
 const SIDE_P2_ACCENT := Color(1.28, 0.31, 0.66, 1.0) # #FF4FA8 with bloom headroom
@@ -62,6 +63,9 @@ var _profile_next_glitch_time: float = 0.0
 var _profile_glitch_remaining: float = 0.0
 var _profile_glitch_jitter: float = 0.0
 var _profile_round_fade_tween: Tween = null
+var _special_shine_tween: Tween = null
+var _special_ready: bool = false
+var _special_pulse_time: float = 0.0
 var _profile_rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
@@ -71,6 +75,7 @@ func _ready() -> void:
 	_profile_scanline_offset = PORTRAIT_HEIGHT * (0.33 if slot == "P1" else 0.71)
 	_schedule_next_profile_glitch()
 	_ensure_portrait_fx_nodes()
+	_ensure_special_fire_node()
 	_configure_layout()
 	_apply_assets()
 	_apply_side_theme()
@@ -80,12 +85,14 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_profile_fx(delta)
+	_update_special_ready_pulse(delta)
 
 func configure(new_hero_name: String, new_slot: String) -> void:
 	hero_name = new_hero_name.to_upper()
 	slot = new_slot
 	if is_inside_tree():
 		_ensure_portrait_fx_nodes()
+		_ensure_special_fire_node()
 		_configure_layout()
 		_apply_assets()
 		_apply_side_theme()
@@ -124,6 +131,12 @@ func _configure_layout() -> void:
 	fill.patch_margin_right = 0
 	fill.patch_margin_bottom = 0
 	fill_clip.size = Vector2(_full_width, FILL_HEIGHT)
+	if special_fire:
+		special_fire.position = Vector2.ZERO
+		special_fire.size = Vector2(_full_width, FILL_HEIGHT)
+		var mat := special_fire.material as ShaderMaterial
+		if mat:
+			mat.set_shader_parameter("direction", 1.0 if slot == "P1" else -1.0)
 	portrait.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	portrait_ring.size = Vector2(PORTRAIT_WIDTH, PORTRAIT_HEIGHT)
 	if portrait_fx_clip:
@@ -235,6 +248,53 @@ func _make_portrait_scanline(node_name: String) -> TextureRect:
 	scanline.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 	return scanline
 
+func _ensure_special_fire_node() -> void:
+	if special_fire:
+		return
+	special_fire = ColorRect.new()
+	special_fire.name = "SpecialFireShine"
+	special_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	special_fire.visible = false
+	special_fire.color = Color.WHITE
+	special_fire.z_index = 4
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+render_mode blend_add, unshaded;
+uniform vec4 fire_color : source_color = vec4(0.2, 1.0, 0.5, 1.0);
+uniform float intensity = 0.0;
+uniform float direction = 1.0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(41.7, 289.3))) * 45758.5453); }
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash(i);
+	float b = hash(i + vec2(1.0, 0.0));
+	float c = hash(i + vec2(0.0, 1.0));
+	float d = hash(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+void fragment() {
+	vec2 uv = UV;
+	float t = TIME * 3.3;
+	float flow_x = (direction > 0.0) ? uv.x : 1.0 - uv.x;
+	float wave = noise(vec2(flow_x * 9.0 - t * 1.8, uv.y * 5.0 + sin(t) * 0.5));
+	float lick = smoothstep(0.24 + uv.y * 0.28, 0.95, wave + sin(flow_x * 18.0 - t * 4.0) * 0.16);
+	float scan = smoothstep(0.0, 0.22, fract(flow_x * 2.2 - t * 0.75)) * (1.0 - smoothstep(0.22, 0.55, fract(flow_x * 2.2 - t * 0.75)));
+	float top = 1.0 - smoothstep(0.15, 1.05, uv.y);
+	float flame = (lick * 0.78 + scan * 0.44 + 0.18) * top * intensity;
+	vec3 hot = mix(fire_color.rgb, vec3(1.0, 0.92, 0.34), clamp(lick + scan * 0.8, 0.0, 1.0));
+	COLOR = vec4(hot, clamp(flame, 0.0, 0.86));
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	mat.set_shader_parameter("intensity", 0.0)
+	special_fire.material = mat
+	fill_clip.add_child(special_fire)
+	fill_clip.move_child(special_fire, fill.get_index() + 1)
+
 func _schedule_next_profile_glitch() -> void:
 	_profile_next_glitch_time = _profile_rng.randf_range(PORTRAIT_GLITCH_MIN_DELAY, PORTRAIT_GLITCH_MAX_DELAY)
 
@@ -306,6 +366,96 @@ func take_damage(amount: int) -> void:
 	set_health(_current_health - amount)
 	_flash_and_shake()
 
+func play_special_ready_shine() -> void:
+	set_special_ready(true)
+	var hero_color := _hero_special_color(hero_name)
+	var hot_color := Color(
+		minf(hero_color.r * 1.75 + 0.38, 2.4),
+		minf(hero_color.g * 1.75 + 0.38, 2.4),
+		minf(hero_color.b * 1.75 + 0.38, 2.4),
+		1.0
+	)
+	if _special_shine_tween and _special_shine_tween.is_valid():
+		_special_shine_tween.kill()
+	_special_shine_tween = create_tween().set_parallel(true).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	# Keep the authored healthbar border clean; the fire/shine lives behind it in FillClip.
+	if outline:
+		outline.modulate = Color.WHITE
+	_special_shine_tween.tween_property(fill, "modulate", hot_color, 0.08)
+	_special_shine_tween.tween_property(portrait_ring, "modulate", hot_color, 0.08)
+	_special_shine_tween.tween_property(name_label, "modulate", hot_color, 0.08)
+	_special_shine_tween.chain().tween_interval(0.06)
+	# Do not tween back to plain white here. The sustained special-ready pulse owns
+	# these colors until the move consumes the charge or the round resets.
+	_special_shine_tween.chain().tween_callback(func() -> void: _apply_special_ready_pulse(true))
+	var mat := fill.material as ShaderMaterial
+	if mat:
+		mat.set_shader_parameter("damage_flash", 1.0)
+		var flash := create_tween()
+		flash.tween_method(func(v: float) -> void: mat.set_shader_parameter("damage_flash", v), 1.0, 0.0, 0.36)
+
+func set_special_ready(ready: bool) -> void:
+	_special_ready = ready
+	if _special_shine_tween and _special_shine_tween.is_valid():
+		_special_shine_tween.kill()
+		_special_shine_tween = null
+	if not ready:
+		_special_pulse_time = 0.0
+		if special_fire:
+			special_fire.visible = false
+			var fire_mat := special_fire.material as ShaderMaterial
+			if fire_mat:
+				fire_mat.set_shader_parameter("intensity", 0.0)
+		if fill:
+			fill.modulate = Color.WHITE
+		if name_label:
+			name_label.modulate = Color.WHITE
+		if outline:
+			outline.modulate = Color.WHITE
+		if portrait_ring:
+			portrait_ring.modulate = Color.WHITE
+	else:
+		_apply_special_ready_pulse(true)
+
+func _update_special_ready_pulse(delta: float) -> void:
+	if not _special_ready:
+		return
+	_special_pulse_time += delta
+	_apply_special_ready_pulse(false)
+
+func _apply_special_ready_pulse(force: bool = false) -> void:
+	if not _special_ready and not force:
+		return
+	var hero_color := _hero_special_color(hero_name)
+	var pulse := 0.62 + 0.20 * sin(_special_pulse_time * 5.6)
+	var bar_glow := Color(
+		1.0 + hero_color.r * pulse * 0.58,
+		1.0 + hero_color.g * pulse * 0.58,
+		1.0 + hero_color.b * pulse * 0.58,
+		1.0
+	)
+	var name_glow := Color(
+		1.0 + hero_color.r * pulse * 0.32,
+		1.0 + hero_color.g * pulse * 0.32,
+		1.0 + hero_color.b * pulse * 0.32,
+		1.0
+	)
+	if fill:
+		fill.modulate = bar_glow
+	if special_fire:
+		special_fire.visible = true
+		var fire_mat := special_fire.material as ShaderMaterial
+		if fire_mat:
+			fire_mat.set_shader_parameter("fire_color", hero_color)
+			fire_mat.set_shader_parameter("intensity", clampf(0.62 + pulse * 0.46, 0.0, 1.0))
+			fire_mat.set_shader_parameter("direction", 1.0 if slot == "P1" else -1.0)
+	if outline:
+		outline.modulate = Color.WHITE
+	if portrait_ring:
+		portrait_ring.modulate = Color.WHITE
+	if name_label:
+		name_label.modulate = name_glow
+
 func _flash_and_shake() -> void:
 	var original_pos := position
 	var tw := create_tween()
@@ -331,6 +481,15 @@ func _hero_fill_colors(name: String) -> Array[Color]:
 			return [Color(0.72, 0.26, 1.34, 1.0), Color(1.02, 0.72, 1.42, 1.0)]
 		_:
 			return [Color(0.25, 1.25, 0.20, 1.0), Color(0.82, 1.45, 0.62, 1.0)]
+
+func _hero_special_color(name: String) -> Color:
+	match name.to_upper():
+		"LOBSTER":
+			return Color(1.0, 0.34, 0.12, 1.0)
+		"NOUSGIRL":
+			return Color(0.90, 0.36, 1.0, 1.0)
+		_:
+			return Color(0.22, 1.0, 0.52, 1.0)
 
 func _hero_profile_path(name: String, suffix: String) -> String:
 	match name.to_upper():

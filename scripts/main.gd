@@ -46,6 +46,7 @@ var p2_round_wins: int = 0
 
 const HITSTOP_ON_HIT: int = 5
 const HITSTOP_ON_BLOCK: int = 3
+const SPECIAL_READY_HIT_STREAK: int = 3
 
 ## HUD nodes (created programmatically)
 ## HealthBar.gd renders labels like P1 — TEKNIUM and AI — TEKNIUM.
@@ -147,6 +148,8 @@ const IMPACT_FLASH_DECAY: float = 8.0
 var debug_timer := 0.0
 var debug_ui_enabled := false
 var debug_toggle_latch := false
+var debug_ai_toggle_latch := false
+var cpu_ai_enabled := true
 var p1_display_health: float = 1000.0
 var p2_display_health: float = 1000.0
 var camera_shake_timer: float = 0.0
@@ -210,6 +213,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_handle_debug_toggle()
+	_handle_debug_ai_toggle()
 	_update_camera_fx(delta)
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
@@ -235,9 +239,8 @@ func _process(delta: float) -> void:
 
 	if round_state == RoundState.PLAYING:
 		if not intro_active:
-			# Temporary dummy CPU: P2 stands still for manual testing.
 			if p2:
-				p2.ai_input = {}
+				p2.ai_input = ai.get_input(p2, p1) if (cpu_ai_enabled and ai and p1) else {}
 
 			# Ensure combat uses this frame's facing, not a stale pre-contact direction.
 			_update_fighter_facing_and_spacing()
@@ -325,13 +328,11 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 	# Pushback direction: defender pushed AWAY from attacker
 	var push_dir: float = 1.0 if defender.position.x > attacker.position.x else -1.0
 
-	# Check if defender is blocking
+	# Check if defender is blocking. All mid attacks, including Lobster's trailer
+	# heavy claw, should respect a valid back/block input; otherwise CPU defense
+	# looks broken and the CPU PROFILE setting feels fake.
 	var blocked := false
-	# Hackathon-video polish: Lobster's giant heavy claw should visibly hurt,
-	# not get quietly swallowed by CPU auto-block while recording B-roll.
-	if attacker.character_name.to_lower() == "lobster" and attacker.current_attack == "heavyPunch":
-		blocked = false
-	elif defender.is_blocking:
+	if defender.is_blocking:
 		if defender.block_type == "stand" and atk_data.type == "low":
 			blocked = false  # Low attack goes under standing block
 		elif defender.block_type == "crouch" and atk_data.get("type", "mid") == "high":
@@ -354,6 +355,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		var knockdown: bool = atk_data.get("knockdown", false)
 		defender.pushback_dir = push_dir
 		defender.apply_hit(atk_data.damage, atk_data.hitstun, atk_data.pushback, knockdown)
+		_register_clean_hit(attacker, defender)
 		_notify_health_damage(defender, atk_data.damage)
 		attacker.apply_hitstop(HITSTOP_ON_HIT)
 		defender.apply_hitstop(HITSTOP_ON_HIT)
@@ -381,6 +383,33 @@ func _notify_health_damage(defender: Player, amount: int) -> void:
 	var widget := p1_health_widget if defender == p1 else p2_health_widget
 	if widget and widget.has_method("take_damage"):
 		widget.take_damage(amount)
+
+func _register_clean_hit(attacker: Player, defender: Player) -> void:
+	if not attacker or not defender:
+		return
+	attacker.hit_streak += 1
+	defender.hit_streak = 0
+	if attacker.hit_streak >= SPECIAL_READY_HIT_STREAK and not attacker.special_ready:
+		attacker.mark_special_ready()
+		_trigger_special_ready_feedback(attacker)
+
+func _trigger_special_ready_feedback(fighter: Player) -> void:
+	var widget := p1_health_widget if fighter == p1 else p2_health_widget
+	if widget and widget.has_method("play_special_ready_shine"):
+		widget.play_special_ready_shine()
+	var accent := _hero_special_color(fighter.character_name)
+	_trigger_impact_flash(accent, 0.14)
+	_trigger_signal_hit_glitch(0.88, 0.16)
+	_trigger_camera_shake(0.10, 2.2)
+
+func _hero_special_color(name: String) -> Color:
+	match name.to_upper():
+		"LOBSTER":
+			return Color(1.0, 0.34, 0.12, 1.0)
+		"NOUSGIRL":
+			return Color(0.90, 0.36, 1.0, 1.0)
+		_:
+			return Color(0.22, 1.0, 0.52, 1.0)
 
 func _box_overlap(a: Rect2, b: Rect2) -> bool:
 	return a.position.x < b.position.x + b.size.x and \
@@ -771,6 +800,8 @@ func _adjust_option(delta: int) -> void:
 	match option_index:
 		0:
 			option_difficulty_index = posmod(option_difficulty_index + delta, CPU_DIFFICULTIES.size())
+			if ai:
+				ai.set_difficulty(CPU_DIFFICULTIES[option_difficulty_index])
 		1:
 			option_sfx_volume = clampi(option_sfx_volume + delta * 5, 0, 100)
 			SoundManager.set_sfx_volume_percent(option_sfx_volume)
@@ -1495,6 +1526,12 @@ func _play_profile_round_intro_fade() -> void:
 	if p2_health_widget and p2_health_widget.has_method("play_round_intro_fade"):
 		p2_health_widget.play_round_intro_fade(0.10)
 
+func _reset_special_ready_hud() -> void:
+	if p1_health_widget and p1_health_widget.has_method("set_special_ready"):
+		p1_health_widget.set_special_ready(false)
+	if p2_health_widget and p2_health_widget.has_method("set_special_ready"):
+		p2_health_widget.set_special_ready(false)
+
 func _start_next_round(first_round: bool = false) -> void:
 	round_state = RoundState.PLAYING
 	intro_active = true
@@ -1533,6 +1570,7 @@ func _start_next_round(first_round: bool = false) -> void:
 				p2.stage_right_bound = right_bound
 	if ai:
 		ai.reset()
+	_reset_special_ready_hud()
 	_apply_camera_tracking(true)
 	_play_profile_round_intro_fade()
 	if announcement_label:
@@ -1815,21 +1853,26 @@ func _update_debug_label() -> void:
 		return
 	var lines: Array[String] = []
 	lines.append("App=%s game_view=%s menu=%d fighter=%d" % [AppState.keys()[app_state], str(game_view.visible) if game_view else "null", menu_index, fighter_select_index])
+	lines.append("CPU AI=%s profile=%s toggle=F8 debug=F9" % ["ON" if cpu_ai_enabled else "OFF", CPU_DIFFICULTIES[option_difficulty_index]])
 	if p1:
 		var sprite1 := p1.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
 		lines.append("Round=%d %s T=%.0f P1w=%d P2w=%d" % [current_round, RoundState.keys()[round_state], round_time_left, p1_round_wins, p2_round_wins])
-		lines.append("P1 pos=(%.0f, %.0f) hp=%d atk=%s hitstun=%s block=%s" % [
+		lines.append("P1 pos=(%.0f, %.0f) hp=%d atk=%s streak=%d special=%s hitstun=%s block=%s" % [
 			p1.position.x, p1.position.y, p1.health,
 			p1.current_attack if p1.current_attack else "-",
+			p1.hit_streak,
+			"READY" if p1.special_ready else "-",
 			str(p1.hitstun_timer) if p1.is_in_hitstun else "-",
 			p1.block_type if p1.is_blocking else "-"])
 	else:
 		lines.append("P1 node=NULL")
 	if p2:
 		var sprite2 := p2.get_node_or_null("AnimatedSprite2D") as AnimatedSprite2D
-		lines.append("P2 pos=(%.0f, %.0f) hp=%d atk=%s hitstun=%s block=%s" % [
+		lines.append("P2 pos=(%.0f, %.0f) hp=%d atk=%s streak=%d special=%s hitstun=%s block=%s" % [
 			p2.position.x, p2.position.y, p2.health,
 			p2.current_attack if p2.current_attack else "-",
+			p2.hit_streak,
+			"READY" if p2.special_ready else "-",
 			str(p2.hitstun_timer) if p2.is_in_hitstun else "-",
 			p2.block_type if p2.is_blocking else "-"])
 	else:
@@ -1846,6 +1889,19 @@ func _handle_debug_toggle() -> void:
 	if pressed and not debug_toggle_latch:
 		_set_debug_ui_enabled(not debug_ui_enabled)
 	debug_toggle_latch = pressed
+
+func _handle_debug_ai_toggle() -> void:
+	var pressed := Input.is_physical_key_pressed(KEY_F8)
+	if pressed and not debug_ai_toggle_latch:
+		cpu_ai_enabled = not cpu_ai_enabled
+		if not cpu_ai_enabled and p2:
+			p2.ai_input = {}
+		if ai:
+			ai.reset()
+		debug_timer = 1.35
+		if debug_label:
+			debug_label.visible = true
+	debug_ai_toggle_latch = pressed
 
 func _set_debug_ui_enabled(enabled: bool) -> void:
 	debug_ui_enabled = enabled

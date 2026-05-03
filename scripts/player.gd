@@ -113,6 +113,7 @@ const SHADOW_MIN_SCALE := 0.58
 const RIM_SCALE_BONUS := 1.02
 const RIM_OFFSET := Vector2(0.0, 0.0)
 const RIM_COLOR := Color(0.82, 0.96, 1.0, 0.08)
+const SPECIAL_AURA_TEX_SIZE := Vector2i(128, 224)
 
 # ── Public state ──────────────────────────────────────────────────────
 var health: int = MAX_HEALTH
@@ -128,6 +129,10 @@ var stage_right_bound: float = STAGE_RIGHT
 var current_attack: String = ""
 var attack_frame: int = 0
 var has_hit: bool = false
+var hit_streak: int = 0
+var special_ready: bool = false
+var special_glow_intensity: float = 0.0
+var special_glow_timer: float = 0.0
 
 # Hitstun / blockstun state
 var hitstun_timer: int = 0
@@ -172,6 +177,7 @@ var shadow_sprite: Sprite2D = null
 var shadow_base_scale: Vector2 = Vector2.ONE
 var shadow_feet_offset_y: float = SHADOW_FEET_OFFSET_Y
 var rim_sprite: AnimatedSprite2D = null
+var special_aura_sprite: Sprite2D = null
 
 # Debug overlay — created programmatically
 var debug_overlay: Label = null
@@ -184,6 +190,7 @@ signal died
 func _ready() -> void:
 	health = MAX_HEALTH
 	_create_shadow()
+	_create_special_aura()
 	_create_rim_sprite()
 	_apply_character_visuals()
 	sprite.animation_finished.connect(_on_animation_finished)
@@ -222,6 +229,9 @@ func _apply_character_visuals() -> void:
 			shadow_feet_offset_y = SHADOW_FEET_OFFSET_Y
 	if shadow_sprite:
 		shadow_sprite.scale = shadow_base_scale
+	if special_aura_sprite:
+		special_aura_sprite.position = sprite.position + Vector2(0.0, -82.0)
+		special_aura_sprite.scale = sprite.scale * (Vector2(1.52, 1.18) if character_name.to_lower() == "lobster" else Vector2(1.34, 1.18))
 	if rim_sprite:
 		rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
 		rim_sprite.position = sprite.position + RIM_OFFSET
@@ -259,6 +269,55 @@ func _create_rim_sprite() -> void:
 	add_child(rim_sprite)
 	move_child(rim_sprite, sprite.get_index())
 
+func _create_special_aura() -> void:
+	special_aura_sprite = Sprite2D.new()
+	special_aura_sprite.name = "SpecialFireAura"
+	special_aura_sprite.centered = true
+	# Proof-pass: draw aura additively over/around the sprite so it is definitely visible
+	# in the trailer iframe; we can push it farther behind after visual approval.
+	special_aura_sprite.z_index = 2
+	special_aura_sprite.texture = _build_special_aura_texture()
+	special_aura_sprite.visible = false
+	special_aura_sprite.modulate = Color(1, 1, 1, 0)
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+render_mode blend_add, unshaded;
+uniform vec4 aura_color : source_color = vec4(0.2, 1.0, 0.5, 1.0);
+uniform float intensity = 0.0;
+uniform float time_offset = 0.0;
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash(i);
+	float b = hash(i + vec2(1.0, 0.0));
+	float c = hash(i + vec2(0.0, 1.0));
+	float d = hash(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+void fragment() {
+	vec2 uv = UV;
+	float t = TIME * 2.8 + time_offset;
+	float center = 1.0 - smoothstep(0.12, 0.54, abs(uv.x - 0.5));
+	float vertical = 1.0 - smoothstep(0.12, 1.0, uv.y);
+	float lick = noise(vec2(uv.x * 9.0 + sin(t + uv.y * 8.0) * 0.8, uv.y * 5.4 - t * 1.35));
+	float tongues = smoothstep(0.24 + uv.y * 0.36, 0.88, lick + center * 0.42);
+	float core = center * vertical;
+	float flame = (core * 0.62 + tongues * 1.05) * intensity;
+	float edge = smoothstep(0.0, 0.30, 0.30 - abs(uv.x - 0.5)) * (1.0 - smoothstep(0.20, 0.98, uv.y));
+	vec3 ember = mix(aura_color.rgb, vec3(1.0, 0.28, 0.04), 0.72);
+	vec3 hot = mix(ember, vec3(1.0, 0.95, 0.16), clamp(tongues * 0.86 + core * 0.32, 0.0, 1.0));
+	COLOR = vec4(hot, clamp((flame + edge * 0.46 * intensity) * texture(TEXTURE, uv).a, 0.0, 1.0));
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	special_aura_sprite.material = mat
+	add_child(special_aura_sprite)
+	move_child(special_aura_sprite, sprite.get_index())
+
 func _build_shadow_texture() -> ImageTexture:
 	var image := Image.create(SHADOW_TEX_SIZE.x, SHADOW_TEX_SIZE.y, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
@@ -277,6 +336,17 @@ func _build_shadow_texture() -> ImageTexture:
 			var ink := Color(0.0, 0.0, 0.0, core_alpha)
 			var edge := Color(0.08, 0.24, 0.32, rim_alpha)
 			image.set_pixel(x, y, ink.blend(edge))
+	return ImageTexture.create_from_image(image)
+
+func _build_special_aura_texture() -> ImageTexture:
+	var image := Image.create(SPECIAL_AURA_TEX_SIZE.x, SPECIAL_AURA_TEX_SIZE.y, false, Image.FORMAT_RGBA8)
+	for y in range(SPECIAL_AURA_TEX_SIZE.y):
+		for x in range(SPECIAL_AURA_TEX_SIZE.x):
+			var uv := Vector2(float(x) / float(SPECIAL_AURA_TEX_SIZE.x - 1), float(y) / float(SPECIAL_AURA_TEX_SIZE.y - 1))
+			var centered := Vector2((uv.x - 0.5) / 0.43, (uv.y - 0.60) / 0.58)
+			var dist := sqrt(centered.x * centered.x + centered.y * centered.y)
+			var alpha: float = clampf((1.0 - smoothstep(0.16, 1.0, dist)) * (1.0 - smoothstep(0.18, 1.0, uv.y)), 0.0, 1.0)
+			image.set_pixel(x, y, Color(1.0, 1.0, 1.0, alpha))
 	return ImageTexture.create_from_image(image)
 
 func _update_shadow() -> void:
@@ -313,20 +383,84 @@ func _draw() -> void:
 	draw_line(Vector2(-8.0, 0.0), Vector2(8.0, 0.0), Color.WHITE, 1.0)
 	draw_line(Vector2(0.0, -8.0), Vector2(0.0, 8.0), Color.WHITE, 1.0)
 
+func _hero_special_color() -> Color:
+	match character_name.to_lower():
+		"lobster":
+			return Color(1.0, 0.34, 0.12, 1.0)
+		"nousgirl":
+			return Color(0.90, 0.36, 1.0, 1.0)
+		_:
+			return Color(0.22, 1.0, 0.52, 1.0)
+
+func mark_special_ready() -> void:
+	special_ready = true
+	special_glow_timer = 1.15
+	special_glow_intensity = 1.0
+
+func clear_special_ready() -> void:
+	hit_streak = 0
+	special_ready = false
+	special_glow_timer = 0.0
+	special_glow_intensity = 0.0
+	if sprite:
+		sprite.modulate = Color.WHITE
+	if special_aura_sprite:
+		special_aura_sprite.visible = false
+		special_aura_sprite.modulate = Color(1, 1, 1, 0)
+		var mat := special_aura_sprite.material as ShaderMaterial
+		if mat:
+			mat.set_shader_parameter("intensity", 0.0)
+	if rim_sprite:
+		rim_sprite.modulate = RIM_COLOR
+
+func consume_special_ready() -> void:
+	# Future special-attack animations should call this when the move actually fires.
+	# Until then, the unlocked aura intentionally persists across hits and movement.
+	clear_special_ready()
+
+func _update_special_glow(delta: float) -> void:
+	if special_glow_timer > 0.0:
+		special_glow_timer = maxf(0.0, special_glow_timer - delta)
+	var pulse := 0.0
+	var target := 0.0
+	if special_ready:
+		pulse = 0.58 + 0.16 * sin(Time.get_ticks_msec() * 0.0062)
+		target = pulse
+	if special_glow_timer > 0.0:
+		target = maxf(target, 0.94 + 0.06 * sin(Time.get_ticks_msec() * 0.050))
+	special_glow_intensity = move_toward(special_glow_intensity, target, delta * 4.6)
+	if sprite:
+		var c := _hero_special_color()
+		var tint := special_glow_intensity
+		sprite.modulate = Color(1.0 + c.r * tint * 0.42, 1.0 + c.g * tint * 0.42, 1.0 + c.b * tint * 0.42, 1.0)
+	if special_aura_sprite:
+		var aura_color := _hero_special_color()
+		special_aura_sprite.visible = special_glow_intensity > 0.03
+		special_aura_sprite.modulate = Color(1.0, 1.0, 1.0, clampf(special_glow_intensity * 1.12, 0.0, 1.0))
+		var mat := special_aura_sprite.material as ShaderMaterial
+		if mat:
+			mat.set_shader_parameter("aura_color", aura_color)
+			mat.set_shader_parameter("intensity", clampf(special_glow_intensity * 1.55, 0.0, 1.0))
+			mat.set_shader_parameter("time_offset", float(player_index) * 4.7)
+
 func _sync_visual_layers() -> void:
 	if sprite == null:
 		return
 	# Most current sheets face right by default; Lobster starter sheets face left.
 	# Keep gameplay facing semantics intact and only invert the visual flip for Lobster.
 	sprite.flip_h = facing_right if character_name.to_lower() == "lobster" else not facing_right
+	if special_aura_sprite:
+		special_aura_sprite.position = sprite.position + Vector2(0.0, -82.0)
 	if rim_sprite == null:
 		return
 	rim_sprite.visible = sprite.visible
 	rim_sprite.sprite_frames = sprite.sprite_frames
 	rim_sprite.flip_h = sprite.flip_h
-	rim_sprite.scale = sprite.scale * RIM_SCALE_BONUS
+	var glow := special_glow_intensity
+	rim_sprite.scale = sprite.scale * (RIM_SCALE_BONUS + glow * 0.055)
 	rim_sprite.position = sprite.position + RIM_OFFSET
-	rim_sprite.modulate = RIM_COLOR
+	var glow_color := _hero_special_color()
+	rim_sprite.modulate = RIM_COLOR.lerp(Color(glow_color.r, glow_color.g, glow_color.b, 0.78), glow)
 	if sprite.sprite_frames and sprite.sprite_frames.has_animation(sprite.animation):
 		if rim_sprite.animation != sprite.animation:
 			rim_sprite.play(sprite.animation)
@@ -335,6 +469,7 @@ func _sync_visual_layers() -> void:
 
 func _physics_process(_delta: float) -> void:
 	just_landed = false
+	_update_special_glow(_delta)
 
 	if hitstop_frames > 0:
 		hitstop_frames -= 1
@@ -554,6 +689,18 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 	current_attack = ""
 	attack_frame = 0
 	has_hit = false
+	hit_streak = 0
+	special_ready = false
+	special_glow_timer = 0.0
+	special_glow_intensity = 0.0
+	if sprite:
+		sprite.modulate = Color.WHITE
+	if special_aura_sprite:
+		special_aura_sprite.visible = false
+		special_aura_sprite.modulate = Color(1, 1, 1, 0)
+		var mat := special_aura_sprite.material as ShaderMaterial
+		if mat:
+			mat.set_shader_parameter("intensity", 0.0)
 	hitstun_timer = 0
 	blockstun_timer = 0
 	is_in_hitstun = false
