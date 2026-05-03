@@ -91,9 +91,9 @@ const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 }
 
 const LOBSTER_ATTACK_HITBOX: Dictionary = {
-	# Tight video-facing claw box: enough to reach Teknium at real pushbox spacing,
-	# but no longer the oversized screen-wide safety net.
-	"heavyPunch":  Rect2(24, -104, 112, 48),
+	# Tight video-facing claw box: must reach only when Lobster is genuinely in close,
+	# with the impact sitting on the extended claw instead of ahead of it.
+	"heavyPunch":  Rect2(28, -104, 96, 48),
 }
 
 # ── Knockdown / getting up timings (from JS config) ──────────────────

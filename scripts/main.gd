@@ -332,7 +332,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		attacker.apply_hitstop(HITSTOP_ON_BLOCK)
 		defender.apply_hitstop(HITSTOP_ON_BLOCK)
 		SoundManager.play_block_sound()
-		_spawn_hit_fx(_impact_position(attacker, defender), true, false)
+		_spawn_hit_fx(_impact_position(attacker, defender), true, false, attacker)
 		_trigger_impact_flash(Color(0.85, 0.92, 1.0, 1.0), 0.10)
 	else:
 		# Clean hit
@@ -346,14 +346,16 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick"
 		var fatal_hit := defender.health <= 0
 		var impact_pos := _impact_position(attacker, defender)
-		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit)
+		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit, attacker)
 		if fatal_hit:
-			_spawn_hit_fx(impact_pos + Vector2(push_dir * -8.0, -10.0), false, true)
+			_spawn_hit_fx(impact_pos + Vector2(push_dir * -8.0, -10.0), false, true, attacker)
 			_trigger_camera_shake(0.26, 7.0)
-			_trigger_impact_flash(Color(1.0, 0.98, 0.92, 1.0), 0.22)
+			var flash_color := Color(1.0, 0.58, 0.28, 1.0) if attacker.character_name.to_lower() == "lobster" else Color(1.0, 0.98, 0.92, 1.0)
+			_trigger_impact_flash(flash_color, 0.22)
 		elif heavy_hit:
 			_trigger_camera_shake(0.18, 5.0 if attacker.current_attack == "heavyKick" else 4.0)
-			_trigger_impact_flash(Color(1.0, 0.96, 0.90, 1.0), 0.16)
+			var flash_color := Color(1.0, 0.42, 0.18, 1.0) if attacker.character_name.to_lower() == "lobster" else Color(1.0, 0.96, 0.90, 1.0)
+			_trigger_impact_flash(flash_color, 0.16)
 		else:
 			_trigger_impact_flash(Color(1.0, 1.0, 1.0, 1.0), 0.08)
 		if defender.health <= 0:
@@ -459,13 +461,14 @@ func _impact_position(attacker: Player, defender: Player) -> Vector2:
 		return Vector2((left + right) * 0.5, visual_y)
 	return defender.position + Vector2(0.0, -_impact_visual_y_offset(attacker.current_attack))
 
-func _spawn_hit_fx(world_pos: Vector2, blocked: bool, heavy: bool) -> void:
+func _spawn_hit_fx(world_pos: Vector2, blocked: bool, heavy: bool, attacker: Player = null) -> void:
 	if not fx_layer:
 		return
 	var fx_root := Node2D.new()
 	fx_root.position = world_pos
 	fx_root.z_index = 500
-	var colors := _hit_fx_colors(blocked, heavy)
+	var attacker_name := attacker.character_name if attacker else ""
+	var colors := _hit_fx_colors(blocked, heavy, attacker_name)
 	var duration := HIT_FX_BLOCK_DURATION if blocked else (HIT_FX_HEAVY_DURATION if heavy else HIT_FX_LIGHT_DURATION)
 	var scale_mul := 0.85 if blocked else (1.45 if heavy else 1.0)
 	var ring := Polygon2D.new()
@@ -517,7 +520,14 @@ func _update_hit_fx(delta: float) -> void:
 		else:
 			active_hit_fx[i] = fx
 
-func _hit_fx_colors(blocked: bool, heavy: bool) -> Array[Color]:
+func _hit_fx_colors(blocked: bool, heavy: bool, attacker_name: String = "") -> Array[Color]:
+	if attacker_name.to_lower() == "lobster":
+		# Lobster hits should read as red/orange shell-and-claw impact, not Teknium green.
+		if blocked:
+			return [Color(1.0, 0.24, 0.08, 0.92), Color(1.0, 0.94, 0.78, 0.95), Color(1.0, 0.50, 0.12, 0.92)]
+		if heavy:
+			return [Color(1.0, 0.08, 0.02, 0.98), Color(1.0, 0.86, 0.54, 1.0), Color(1.0, 0.34, 0.02, 0.96)]
+		return [Color(0.95, 0.12, 0.08, 0.92), Color(1.0, 0.86, 0.68, 0.95), Color(1.0, 0.38, 0.08, 0.88)]
 	if blocked:
 		return [Color(0.15, 1.0, 0.78, 0.92), Color(0.92, 1.0, 1.0, 0.95), Color(0.12, 0.88, 0.98, 0.92)]
 	if heavy:
@@ -582,7 +592,8 @@ func _start_match() -> void:
 		ai.set_difficulty(CPU_DIFFICULTIES[option_difficulty_index])
 		ai.reset()
 	_update_round_dots()
-	_play_start_banner()
+	# Round-start presentation is handled by _show_combat_overlay() in
+	# _start_next_round(); keep the old sliding start banner off gameplay.
 	_start_next_round(true)
 
 func _hide_result_panel() -> void:
@@ -600,18 +611,12 @@ func _hide_result_panel() -> void:
 		result_prompt_label.visible = false
 
 func _show_result_panel(winner: int) -> void:
-	if not result_panel_bg:
-		return
-	result_panel_bg.visible = true
-	result_panel_border.visible = true
-	result_title_label.visible = true
-	result_status_label.visible = true
-	result_winner_label.visible = true
-	result_prompt_label.visible = true
-	result_title_label.text = "SIMULATION RESULT"
-	result_status_label.text = "SIMULATION COMPLETE"
-	result_winner_label.text = "P%d DOMINANT" % winner
-	result_prompt_label.text = "PRESS ENTER FOR MENU"
+	# Match-end presentation now uses the same polished combat overlay system as
+	# round start / round over. Keep the legacy result-panel nodes hidden so the
+	# old boxed result card cannot stack behind the new overlay.
+	_hide_result_panel()
+	var accent := Color(0.20, 1.0, 0.52) if winner == 1 else Color(1.0, 0.34, 0.58)
+	_show_combat_overlay("SIMULATION RESULT", "P%d DOMINANT // ENTER FOR MENU" % winner, accent, 0.0)
 
 func _enter_menu() -> void:
 	app_state = AppState.MENU
@@ -1327,6 +1332,11 @@ func _play_profile_round_intro_fade() -> void:
 func _start_next_round(first_round: bool = false) -> void:
 	round_state = RoundState.PLAYING
 	intro_active = true
+	start_banner_timer = 0.0
+	if start_banner_panel:
+		start_banner_panel.visible = false
+	if start_banner_label:
+		start_banner_label.visible = false
 	intro_token += 1
 	var this_intro: int = intro_token
 	round_time_left = ROUND_TIME
