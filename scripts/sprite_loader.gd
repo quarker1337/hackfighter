@@ -77,7 +77,14 @@ static func build_lobster_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
 	var idle_tex := load("res://assets/real/characters/lobster/Lobster_Idle_V1-Sheet.png") as Texture2D
 	var walk_tex := load("res://assets/real/characters/lobster/Lobster_Walk_V1-Sheet.png") as Texture2D
+	var crouch_tex := load("res://assets/real/characters/lobster/Lobster_Crouch_V3-Sheet.png") as Texture2D
+	var jump_tex := load("res://assets/real/characters/lobster/Lobster_Jump_V1-Sheet.png") as Texture2D
+	var lightpunch_tex := load("res://assets/real/characters/lobster/Lobster_Light_Punch_V1-Sheet.png") as Texture2D
+	var heavypunch_tex := load("res://assets/real/characters/lobster/Lobster_Heavy_Punch_V1-Sheet.png") as Texture2D
+	var doublepunch_tex := load("res://assets/real/characters/lobster/Lobster_Double_Punch_V2-Sheet.png") as Texture2D
+	var taunt_tex := load("res://assets/real/characters/lobster/Lobster_Taunt_V1-Sheet.png") as Texture2D
 	var hurt_tex := load("res://assets/real/characters/lobster/Lobster_Hurt_V1-Sheet.png") as Texture2D
+	var ko_tex := load("res://assets/real/characters/lobster/Lobster_KO_V1-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
 		push_warning("SpriteLoader: Lobster sheets missing, falling back to Teknium")
 		return build_teknium_frames()
@@ -85,22 +92,52 @@ static func build_lobster_frames() -> SpriteFrames:
 	_add_sheet_animation(frames, "idle", idle_tex, 5, 60.0 / 8.0, true)
 	_add_sheet_animation(frames, "walking", walk_tex, 6, 60.0 / 6.0, true)
 
-	_add_single_frame_anim_from_sheet(frames, "jump", idle_tex, 1, 5, 60.0 / 5.0)
-	_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 2, 5, 60.0 / 4.0)
-	_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 5, 60.0 / 4.0, false)
-	_add_sheet_range_animation(frames, "heavypunch", idle_tex, 1, 3, 5, 60.0 / 5.0, false)
-	_add_single_frame_anim_from_sheet(frames, "lightkick", walk_tex, 2, 6, 60.0 / 4.0)
-	_add_single_frame_anim_from_sheet(frames, "heavykick", walk_tex, 3, 6, 60.0 / 5.0)
-	_add_single_frame_anim_from_sheet(frames, "victory", idle_tex, 4, 5, 60.0 / 8.0)
+	if jump_tex:
+		_add_sheet_animation(frames, "jump", jump_tex, 2, 60.0 / 5.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "jump", idle_tex, 1, 5, 60.0 / 5.0)
+	if crouch_tex:
+		_add_sheet_animation(frames, "crouching", crouch_tex, 6, 60.0 / 4.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 2, 5, 60.0 / 4.0)
+	if lightpunch_tex:
+		_add_sheet_animation(frames, "lightpunch", lightpunch_tex, 5, 60.0 / 4.0, false)
+	else:
+		_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 5, 60.0 / 4.0, false)
+	if heavypunch_tex:
+		# Lobster's authored heavy punch has 6 frames; frames 5-6 are the real
+		# extended claw. Duplicate the final frame once so the hit pose breathes
+		# slightly before the attack returns to idle.
+		_add_sheet_animation(frames, "heavypunch", heavypunch_tex, 6, 18.0, false)
+		frames.add_frame("heavypunch", frames.get_frame_texture("heavypunch", 5))
+	else:
+		_add_sheet_range_animation(frames, "heavypunch", idle_tex, 1, 3, 5, 60.0 / 5.0, false)
+	if doublepunch_tex:
+		_add_sheet_animation(frames, "lightkick", doublepunch_tex, 8, 60.0 / 4.0, false)
+		_add_sheet_animation(frames, "heavykick", doublepunch_tex, 8, 60.0 / 5.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "lightkick", walk_tex, 2, 6, 60.0 / 4.0)
+		_add_single_frame_anim_from_sheet(frames, "heavykick", walk_tex, 3, 6, 60.0 / 5.0)
+	if taunt_tex:
+		_add_sheet_range_animation(frames, "victory", taunt_tex, 0, 3, 6, 60.0 / 8.0, false)
+		_add_sheet_range_animation(frames, "victory_loop", taunt_tex, 3, 3, 6, 60.0 / 8.0, true)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "victory", idle_tex, 4, 5, 60.0 / 8.0)
 	if hurt_tex:
 		_add_sheet_animation(frames, "abdomen_hit", hurt_tex, 3, 60.0 / 4.0, false)
 		_add_sheet_animation(frames, "head_hit", hurt_tex, 3, 60.0 / 4.0, false)
 	else:
 		_add_single_frame_anim_from_sheet(frames, "abdomen_hit", idle_tex, 3, 5, 60.0 / 4.0)
 		_add_single_frame_anim_from_sheet(frames, "head_hit", idle_tex, 3, 5, 60.0 / 4.0)
-	_add_single_frame_anim_from_sheet(frames, "ko", idle_tex, 3, 5, 60.0 / 6.0)
+	if ko_tex:
+		_add_sheet_animation(frames, "ko", ko_tex, 8, 60.0 / 6.0, false)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "ko", idle_tex, 3, 5, 60.0 / 6.0)
 	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 5, 60.0 / 6.0)
-	_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 2, 5, 60.0 / 6.0)
+	if crouch_tex:
+		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+	else:
+		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 2, 5, 60.0 / 6.0)
 	return frames
 
 static func _add_sheet_animation(frames: SpriteFrames, anim_name: String, sheet: Texture2D, frame_count: int, speed: float, loop: bool) -> void:

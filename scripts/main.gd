@@ -61,6 +61,12 @@ var timer_bg: NinePatchRect = null
 var timer_label: Label = null
 var timer_word_label: Label = null
 var announcement_label: Label = null
+var combat_overlay_back: Panel = null
+var combat_overlay_panel: Panel = null
+var combat_overlay_title_label: Label = null
+var combat_overlay_detail_label: Label = null
+var combat_overlay_timer: float = 0.0
+var combat_overlay_accent: Color = Color(0.0, 0.95, 0.82, 1.0)
 var result_panel_bg: ColorRect = null
 var result_panel_border: ColorRect = null
 var result_title_label: Label = null
@@ -195,6 +201,7 @@ func _process(delta: float) -> void:
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
 	_update_start_banner(delta)
+	_update_combat_overlay(delta)
 	_update_boot_intro(delta)
 	if app_state != AppState.GAME:
 		menu_fx_time += delta
@@ -245,6 +252,7 @@ func _process(delta: float) -> void:
 		if round_over_timer <= 0.0:
 			if p1_round_wins >= ROUNDS_TO_WIN or p2_round_wins >= ROUNDS_TO_WIN:
 				round_state = RoundState.MATCH_OVER
+				_hide_combat_overlay()
 				if announcement_label:
 					announcement_label.visible = false
 				var match_winner := 1 if p1_round_wins >= ROUNDS_TO_WIN else 2
@@ -305,7 +313,11 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 
 	# Check if defender is blocking
 	var blocked := false
-	if defender.is_blocking:
+	# Hackathon-video polish: Lobster's giant heavy claw should visibly hurt,
+	# not get quietly swallowed by CPU auto-block while recording B-roll.
+	if attacker.character_name.to_lower() == "lobster" and attacker.current_attack == "heavyPunch":
+		blocked = false
+	elif defender.is_blocking:
 		if defender.block_type == "stand" and atk_data.type == "low":
 			blocked = false  # Low attack goes under standing block
 		elif defender.block_type == "crouch" and atk_data.get("type", "mid") == "high":
@@ -553,6 +565,7 @@ func _start_match() -> void:
 	if stage and stage.has_method("set_stage_theme"):
 		stage.set_stage_theme("city")
 	_hide_result_panel()
+	_hide_combat_overlay()
 	_set_game_hud_visible(true)
 	if p1:
 		p1.set_character(selected_p1_fighter_name)
@@ -611,6 +624,7 @@ func _enter_menu() -> void:
 	if game_view:
 		game_view.visible = false
 	_hide_result_panel()
+	_hide_combat_overlay()
 	if announcement_label:
 		announcement_label.visible = false
 	start_banner_timer = 0.0
@@ -1234,6 +1248,48 @@ func _play_start_banner() -> void:
 	start_banner_label.visible = true
 	_update_start_banner(0.0)
 
+func _show_combat_overlay(title: String, detail: String, accent: Color, hold_time: float = 0.0) -> void:
+	if not (combat_overlay_back and combat_overlay_panel and combat_overlay_title_label and combat_overlay_detail_label):
+		return
+	combat_overlay_accent = accent
+	combat_overlay_timer = hold_time
+	_set_panel_colors(combat_overlay_back, Color(accent.r, accent.g, accent.b, 0.18), Color(accent.r, accent.g, accent.b, 0.55))
+	_set_panel_colors(combat_overlay_panel, Color(0.015, 0.035, 0.048, 0.88), Color(accent.r, accent.g, accent.b, 0.78))
+	combat_overlay_title_label.text = title
+	combat_overlay_detail_label.text = detail
+	combat_overlay_title_label.add_theme_color_override("font_color", Color(0.94, 1.0, 1.0))
+	combat_overlay_detail_label.add_theme_color_override("font_color", Color(accent.r * 0.55 + 0.45, accent.g * 0.55 + 0.45, accent.b * 0.55 + 0.45, 1.0))
+	combat_overlay_back.visible = true
+	combat_overlay_panel.visible = true
+	combat_overlay_title_label.visible = true
+	combat_overlay_detail_label.visible = true
+	_update_combat_overlay(0.0)
+
+func _hide_combat_overlay() -> void:
+	combat_overlay_timer = 0.0
+	for node in [combat_overlay_back, combat_overlay_panel, combat_overlay_title_label, combat_overlay_detail_label]:
+		if node:
+			node.visible = false
+	if announcement_label:
+		announcement_label.visible = false
+
+func _update_combat_overlay(delta: float) -> void:
+	if not (combat_overlay_back and combat_overlay_panel and combat_overlay_title_label and combat_overlay_detail_label):
+		return
+	if not combat_overlay_panel.visible:
+		return
+	if combat_overlay_timer > 0.0:
+		combat_overlay_timer = maxf(0.0, combat_overlay_timer - delta)
+		if combat_overlay_timer <= 0.0:
+			_hide_combat_overlay()
+			return
+	var t := Time.get_ticks_msec() * 0.001
+	var pulse := 0.72 + 0.18 * sin(t * 7.0)
+	combat_overlay_back.modulate = Color(1.0, 1.0, 1.0, 0.86 + 0.08 * sin(t * 3.1))
+	combat_overlay_panel.modulate = Color(1.0, 1.0, 1.0, 0.92)
+	combat_overlay_title_label.modulate = Color(1.0, 1.0, 1.0, pulse)
+	combat_overlay_detail_label.modulate = Color(1.0, 1.0, 1.0, 0.76 + 0.12 * sin(t * 4.3))
+
 func _update_start_banner(delta: float) -> void:
 	if not (start_banner_panel and start_banner_label):
 		return
@@ -1304,26 +1360,24 @@ func _start_next_round(first_round: bool = false) -> void:
 	_apply_camera_tracking(true)
 	_play_profile_round_intro_fade()
 	if announcement_label:
-		announcement_label.visible = true
-		announcement_label.text = "ROUND %d INITIALIZING" % current_round
+		announcement_label.visible = false
+		announcement_label.text = ""
+	_show_combat_overlay("ROUND %d" % current_round, "INITIALIZING COMBAT LINK", Color(0.0, 0.95, 0.82), 0.0)
 	SoundManager.play_round_call(current_round, 0.75)
 	await get_tree().create_timer(1.15).timeout
 	if this_intro != intro_token:
 		return
-	if announcement_label:
-		announcement_label.text = "READY"
+	_show_combat_overlay("READY", "SYNCHRONIZE INPUT // HOLD POSITION", Color(0.78, 1.0, 0.28), 0.0)
 	SoundManager.play("ready", 0.75)
 	await get_tree().create_timer(0.95).timeout
 	if this_intro != intro_token:
 		return
-	if announcement_label:
-		announcement_label.text = "ENGAGE"
+	_show_combat_overlay("ENGAGE", "SIMULATION LIVE", Color(0.18, 1.0, 0.56), 0.0)
 	SoundManager.play("fight", 0.8)
 	await get_tree().create_timer(0.45).timeout
 	if this_intro != intro_token:
 		return
-	if announcement_label:
-		announcement_label.visible = false
+	_hide_combat_overlay()
 	if p1:
 		p1.control_enabled = true
 	if p2:
@@ -1358,14 +1412,22 @@ func _finish_round(winner: int, by_ko: bool) -> void:
 			p2._set_animation("victory")
 
 	_update_round_dots()
-	if announcement_label:
-		if winner == 0:
-			announcement_label.text = "TIME LIMIT\nNO CLEAR WINNER"
-		elif by_ko:
-			announcement_label.text = "TARGET DOWN\nP%d TAKES ROUND %d" % [winner, current_round]
-		else:
-			announcement_label.text = "TIME LIMIT\nP%d TAKES ROUND %d" % [winner, current_round]
-		announcement_label.visible = true
+	var round_detail := ""
+	var round_title := ""
+	var accent := Color(0.0, 0.95, 0.82)
+	if winner == 0:
+		round_title = "ROUND DRAW"
+		round_detail = "TIME LIMIT // NO CLEAR WINNER"
+		accent = Color(0.70, 0.82, 1.0)
+	elif by_ko:
+		round_title = "TARGET DOWN"
+		round_detail = "P%d TAKES ROUND %d" % [winner, current_round]
+		accent = Color(0.20, 1.0, 0.52) if winner == 1 else Color(1.0, 0.34, 0.58)
+	else:
+		round_title = "TIME LIMIT"
+		round_detail = "P%d TAKES ROUND %d" % [winner, current_round]
+		accent = Color(0.78, 1.0, 0.28)
+	_show_combat_overlay(round_title, round_detail, accent, 0.0)
 	current_round += 1
 
 # ── HUD ───────────────────────────────────────────────────────────────
@@ -1452,6 +1514,39 @@ func _create_hud() -> void:
 	announcement_label.add_theme_color_override("font_color", Color(0.90, 0.98, 1.0))
 	announcement_label.visible = false
 	_ui_add_child(announcement_label)
+
+	combat_overlay_back = _make_panel(Vector2(100, 92), Vector2(312, 90), Color(0.0, 0.92, 0.82, 0.18), Color(0.0, 0.95, 0.82, 0.54), 2, 11)
+	combat_overlay_back.visible = false
+	_ui_add_child(combat_overlay_back)
+
+	combat_overlay_panel = _make_panel(Vector2(106, 98), Vector2(300, 78), Color(0.015, 0.035, 0.048, 0.90), Color(0.0, 0.95, 0.82, 0.78), 1, 9)
+	combat_overlay_panel.visible = false
+	_ui_add_child(combat_overlay_panel)
+
+	combat_overlay_title_label = Label.new()
+	combat_overlay_title_label.position = Vector2(118, 106)
+	combat_overlay_title_label.size = Vector2(276, 34)
+	combat_overlay_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combat_overlay_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	combat_overlay_title_label.add_theme_font_override("font", HUD_FONT)
+	combat_overlay_title_label.add_theme_font_size_override("font_size", 25)
+	combat_overlay_title_label.add_theme_color_override("font_color", Color(0.94, 1.0, 1.0))
+	combat_overlay_title_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.02, 0.03, 1.0))
+	combat_overlay_title_label.add_theme_constant_override("shadow_offset_x", 2)
+	combat_overlay_title_label.add_theme_constant_override("shadow_offset_y", 2)
+	combat_overlay_title_label.visible = false
+	_ui_add_child(combat_overlay_title_label)
+
+	combat_overlay_detail_label = Label.new()
+	combat_overlay_detail_label.position = Vector2(118, 140)
+	combat_overlay_detail_label.size = Vector2(276, 22)
+	combat_overlay_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	combat_overlay_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	combat_overlay_detail_label.add_theme_font_override("font", HUD_FONT)
+	combat_overlay_detail_label.add_theme_font_size_override("font_size", 10)
+	combat_overlay_detail_label.add_theme_color_override("font_color", Color(0.70, 1.0, 0.92))
+	combat_overlay_detail_label.visible = false
+	_ui_add_child(combat_overlay_detail_label)
 
 	result_panel_border = ColorRect.new()
 	result_panel_border.position = Vector2(130, 52)

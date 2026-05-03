@@ -31,6 +31,13 @@ const TEKNIUM_ATTACKS: Dictionary = {
 	"heavyKick":   { "startup": 7,  "active": 4, "recovery": 14, "damage": 100, "hitstun": 20, "blockstun": 12, "pushback": 5, "type": "mid", "knockdown": true },
 }
 
+const LOBSTER_ATTACKS: Dictionary = {
+	# Lobster's 6-frame heavy-punch sheet only extends the arm/claw on frames 5-6.
+	# The sprite loader duplicates the final frame for a tiny hold, so keep the hit
+	# inactive until the claw is visually out and let it stay active through that hold.
+	"heavyPunch":  { "startup": 14, "active": 10, "recovery": 3,  "damage": 160, "hitstun": 28, "blockstun": 12, "pushback": 7, "type": "mid" },
+}
+
 # ── Animation speeds (JS frames per sprite-frame) ────────────────────
 const ANIM_SPEED: Dictionary = {
 	"idle":         8,
@@ -62,7 +69,7 @@ const CHARACTER_HURTBOX: Dictionary = {
 const BODY_COLLISION_RADIUS: Dictionary = {
 	"default": 42.5,
 	"teknium": 42.5,
-	"lobster": 70.0,
+	"lobster": 50.0,
 }
 
 # JS attackHitbox: relative to fighter center-bottom, facing right
@@ -78,9 +85,15 @@ const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 	"heavyPunch":  Rect2(8, -68, 68, 24),
 	"lightKick":   Rect2(-6, -52, 78, 28),
 	# Teknium uses a high-kick sheet; keep the box around the raised leg/torso line
-	# instead of the inherited low sweep box, which slipped under standing hurtboxes.
+	# instead of the inherited old low sweep box, which slipped under standing hurtboxes.
 	# Front reach is trimmed so it does not connect on Lobster's extended claw pixels.
 	"heavyKick":   Rect2(4, -112, 82, 44),
+}
+
+const LOBSTER_ATTACK_HITBOX: Dictionary = {
+	# Tight video-facing claw box: enough to reach Teknium at real pushbox spacing,
+	# but no longer the oversized screen-wide safety net.
+	"heavyPunch":  Rect2(24, -104, 112, 48),
 }
 
 # ── Knockdown / getting up timings (from JS config) ──────────────────
@@ -572,13 +585,19 @@ func is_attack_active() -> bool:
 	return attack_frame >= active_start and attack_frame <= active_end
 
 func get_attack_data(attack_name: String) -> Dictionary:
-	if character_name.to_lower() == "teknium" and TEKNIUM_ATTACKS.has(attack_name):
+	var key := character_name.to_lower()
+	if key == "teknium" and TEKNIUM_ATTACKS.has(attack_name):
 		return TEKNIUM_ATTACKS[attack_name]
+	if key == "lobster" and LOBSTER_ATTACKS.has(attack_name):
+		return LOBSTER_ATTACKS[attack_name]
 	return ATTACKS[attack_name]
 
 func get_attack_hitbox_data(attack_name: String) -> Rect2:
-	if character_name.to_lower() == "teknium" and TEKNIUM_ATTACK_HITBOX.has(attack_name):
+	var key := character_name.to_lower()
+	if key == "teknium" and TEKNIUM_ATTACK_HITBOX.has(attack_name):
 		return TEKNIUM_ATTACK_HITBOX[attack_name]
+	if key == "lobster" and LOBSTER_ATTACK_HITBOX.has(attack_name):
+		return LOBSTER_ATTACK_HITBOX[attack_name]
 	return ATTACK_HITBOX.get(attack_name, Rect2())
 
 func get_hurtbox_data() -> Rect2:
