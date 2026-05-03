@@ -88,6 +88,17 @@ var start_banner_panel: Panel = null
 var start_banner_label: Label = null
 var start_banner_timer: float = 0.0
 var menu_fx_time: float = 0.0
+var boot_intro_active: bool = false
+var boot_intro_seen: bool = false
+var boot_intro_time: float = 0.0
+const BOOT_INTRO_DURATION: float = 3.35
+var boot_overlay: ColorRect = null
+var boot_logo_label: Label = null
+var boot_subtitle_label: Label = null
+var boot_status_label: Label = null
+var boot_progress_panel: Panel = null
+var boot_progress_fill: ColorRect = null
+var boot_code_labels: Array[Label] = []
 var p1_round_dots: Array[ColorRect] = []
 var p2_round_dots: Array[ColorRect] = []
 
@@ -169,6 +180,7 @@ func _ready() -> void:
 	_create_fx_layer()
 	_create_hud()
 	_create_menu_ui()
+	_create_boot_intro_ui()
 	SoundManager.set_sfx_volume_percent(option_sfx_volume)
 	SoundManager.set_music_volume_percent(option_music_volume)
 	SoundManager.set_radio_channel(option_radio_index)
@@ -183,9 +195,11 @@ func _process(delta: float) -> void:
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
 	_update_start_banner(delta)
+	_update_boot_intro(delta)
 	if app_state != AppState.GAME:
 		menu_fx_time += delta
-		_process_menu_input()
+		if not boot_intro_active:
+			_process_menu_input()
 		_update_menu_ui()
 		_animate_menu_ui()
 		_update_debug_label()
@@ -531,6 +545,7 @@ func _enforce_fighter_separation() -> void:
 	right_fighter.position.x = clampf(right_fighter.position.x, right_fighter.stage_left_bound, right_fighter.stage_right_bound)
 
 func _start_match() -> void:
+	SoundManager.stop_music()
 	app_state = AppState.GAME
 	menu_index = 0
 	if game_view:
@@ -612,6 +627,9 @@ func _enter_menu() -> void:
 		p2.control_enabled = false
 		p2.ai_input = {}
 		p2._set_animation("idle")
+	SoundManager.play_music("menu_theme", 0.50)
+	if not boot_intro_seen and boot_overlay:
+		_start_boot_intro()
 	_update_menu_ui()
 
 func _process_menu_input() -> void:
@@ -619,9 +637,12 @@ func _process_menu_input() -> void:
 		AppState.MENU:
 			if Input.is_action_just_pressed("p1_up"):
 				menu_index = posmod(menu_index - 1, 3)
+				SoundManager.play("menu_cursor", 0.42)
 			elif Input.is_action_just_pressed("p1_down"):
 				menu_index = posmod(menu_index + 1, 3)
+				SoundManager.play("menu_cursor", 0.42)
 			elif Input.is_action_just_pressed("p1_start"):
+				SoundManager.play("menu_select", 0.50)
 				match menu_index:
 					0:
 						app_state = AppState.FIGHTER_SELECT
@@ -636,14 +657,18 @@ func _process_menu_input() -> void:
 		AppState.FIGHTER_SELECT:
 			if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p1_right"):
 				fighter_select_side = 1 - fighter_select_side
+				SoundManager.play("menu_cursor", 0.42)
 				fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name if fighter_select_side == 1 else selected_p1_fighter_name)
 				if fighter_select_index < 0 or _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
 					fighter_select_index = _first_unlocked_fighter_index()
 			elif Input.is_action_just_pressed("p1_up"):
 				_step_fighter_select(-1)
+				SoundManager.play("menu_cursor", 0.42)
 			elif Input.is_action_just_pressed("p1_down"):
 				_step_fighter_select(1)
+				SoundManager.play("menu_cursor", 0.42)
 			elif Input.is_action_just_pressed("p1_start"):
+				SoundManager.play("menu_select", 0.50)
 				if _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
 					fighter_select_index = _first_unlocked_fighter_index()
 				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
@@ -936,6 +961,121 @@ void fragment() {
 	crt_mat.shader = crt_shader
 	menu_crt_overlay.material = crt_mat
 	_ui_add_child(menu_crt_overlay)
+
+func _create_boot_intro_ui() -> void:
+	boot_overlay = ColorRect.new()
+	boot_overlay.name = "HackfighterBootIntro"
+	boot_overlay.position = Vector2.ZERO
+	boot_overlay.size = Vector2(SCREEN_WIDTH, SCREEN_HEIGHT)
+	boot_overlay.color = Color(0.002, 0.006, 0.010, 1.0)
+	boot_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	boot_overlay.visible = false
+	_ui_add_child(boot_overlay)
+
+	boot_logo_label = Label.new()
+	boot_logo_label.position = Vector2(42, 82)
+	boot_logo_label.size = Vector2(428, 46)
+	boot_logo_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boot_logo_label.add_theme_font_override("font", JP_UI_FONT)
+	boot_logo_label.add_theme_font_size_override("font_size", 34)
+	boot_logo_label.add_theme_color_override("font_color", Color(0.90, 0.96, 0.98))
+	boot_logo_label.text = "HACKFIGHTER"
+	boot_logo_label.visible = false
+	_ui_add_child(boot_logo_label)
+
+	boot_subtitle_label = Label.new()
+	boot_subtitle_label.position = Vector2(56, 124)
+	boot_subtitle_label.size = Vector2(400, 26)
+	boot_subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boot_subtitle_label.add_theme_font_override("font", JP_UI_FONT)
+	boot_subtitle_label.add_theme_font_size_override("font_size", 15)
+	boot_subtitle_label.add_theme_color_override("font_color", Color(0.70, 0.94, 0.94))
+	boot_subtitle_label.text = "起動中 // 侵入格闘システム"
+	boot_subtitle_label.visible = false
+	_ui_add_child(boot_subtitle_label)
+
+	var code_lines := ["CONNECTING TO NOUS GRID...", "LOADING TEKNIUM COMBAT KERNEL", "LOCKING UNIMPLEMENTED SLOTS", "READY / MENU HANDOFF"]
+	for i in range(code_lines.size()):
+		var line := Label.new()
+		line.position = Vector2(82, 154 + i * 15)
+		line.size = Vector2(348, 14)
+		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		line.add_theme_font_override("font", JP_UI_FONT)
+		line.add_theme_font_size_override("font_size", 10)
+		line.add_theme_color_override("font_color", Color(0.70, 0.82, 0.84))
+		line.text = code_lines[i]
+		line.visible = false
+		_ui_add_child(line)
+		boot_code_labels.append(line)
+
+	boot_progress_panel = _make_panel(Vector2(126, 218), Vector2(260, 10), Color(0.01, 0.04, 0.05, 0.96), Color(0.0, 0.88, 0.78, 0.62), 1, 3)
+	boot_progress_panel.visible = false
+	_ui_add_child(boot_progress_panel)
+
+	boot_progress_fill = ColorRect.new()
+	boot_progress_fill.position = Vector2(129, 221)
+	boot_progress_fill.size = Vector2(0, 6)
+	boot_progress_fill.color = Color(0.80, 1.0, 0.96, 1.0)
+	boot_progress_fill.visible = false
+	_ui_add_child(boot_progress_fill)
+
+	boot_status_label = Label.new()
+	boot_status_label.position = Vector2(92, 236)
+	boot_status_label.size = Vector2(328, 16)
+	boot_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	boot_status_label.add_theme_font_override("font", JP_UI_FONT)
+	boot_status_label.add_theme_font_size_override("font_size", 11)
+	boot_status_label.add_theme_color_override("font_color", Color(0.78, 0.92, 0.94))
+	boot_status_label.text = "PRESS START AFTER BOOT"
+	boot_status_label.visible = false
+	_ui_add_child(boot_status_label)
+
+func _start_boot_intro() -> void:
+	boot_intro_active = true
+	boot_intro_seen = true
+	boot_intro_time = 0.0
+	SoundManager.play("menu_open", 0.30)
+	_set_boot_intro_visible(true)
+	_update_boot_intro(0.0)
+
+func _set_boot_intro_visible(visible: bool) -> void:
+	if boot_overlay: boot_overlay.visible = visible
+	if boot_logo_label: boot_logo_label.visible = visible
+	if boot_subtitle_label: boot_subtitle_label.visible = visible
+	if boot_status_label: boot_status_label.visible = visible
+	if boot_progress_panel: boot_progress_panel.visible = visible
+	if boot_progress_fill: boot_progress_fill.visible = visible
+	for line in boot_code_labels:
+		if line: line.visible = visible
+
+func _update_boot_intro(delta: float) -> void:
+	if not boot_intro_active:
+		return
+	boot_intro_time += delta
+	var t := clampf(boot_intro_time / BOOT_INTRO_DURATION, 0.0, 1.0)
+	var logo_alpha := smoothstep(0.02, 0.22, t) * (1.0 - smoothstep(0.88, 1.0, t))
+	var pulse := 0.86 + 0.14 * sin(boot_intro_time * 13.0)
+	if boot_overlay:
+		boot_overlay.color = Color(0.002, 0.006 + t * 0.012, 0.010 + t * 0.018, 1.0 - smoothstep(0.86, 1.0, t))
+	if boot_logo_label:
+		boot_logo_label.modulate = Color(0.88 + pulse * 0.10, 0.96, 0.98, logo_alpha)
+		boot_logo_label.position.x = 42.0 + sin(boot_intro_time * 19.0) * (1.8 if t < 0.32 else 0.35)
+	if boot_subtitle_label:
+		boot_subtitle_label.modulate = Color(1.0, 1.0, 1.0, smoothstep(0.08, 0.24, t) * (1.0 - smoothstep(0.90, 1.0, t)))
+	for i in range(boot_code_labels.size()):
+		var line := boot_code_labels[i]
+		var line_on := smoothstep(0.14 + float(i) * 0.08, 0.20 + float(i) * 0.08, t)
+		line.modulate = Color(1.0, 1.0, 1.0, line_on * (1.0 - smoothstep(0.90, 1.0, t)))
+	if boot_progress_fill:
+		boot_progress_fill.size.x = 254.0 * smoothstep(0.22, 0.88, t)
+		boot_progress_fill.modulate = Color(0.78, 0.96, 0.94, 0.80 + sin(boot_intro_time * 22.0) * 0.16)
+	if boot_status_label:
+		boot_status_label.text = "SYSTEM ONLINE" if t > 0.82 else "BOOT %.0f%%" % [t * 100.0]
+		boot_status_label.modulate = Color(1.0, 1.0, 1.0, smoothstep(0.34, 0.52, t) * (1.0 - smoothstep(0.92, 1.0, t)))
+	if boot_intro_time >= BOOT_INTRO_DURATION:
+		boot_intro_active = false
+		_set_boot_intro_visible(false)
+		SoundManager.play("menu_select", 0.38)
 
 func _get_fighter_select_portrait(fighter_name: String) -> Texture2D:
 	match fighter_name:

@@ -24,6 +24,10 @@ const MANIFEST: Dictionary = {
 	"you_win":      "res://assets/audio/announcer/You_Win.mp3",
 	"you_lose":     "res://assets/audio/announcer/You_Loose.mp3",
 	"perfect":      "res://assets/audio/announcer/Perfect.mp3",
+	"menu_theme":   "res://assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_01 - Mode Select.wav",
+	"menu_cursor":  "res://assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_02 - Move Cursor.wav",
+	"menu_select":  "res://assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_03 - Selection.wav",
+	"menu_open":    "res://assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_04 - Plane.wav",
 	"light_attack": "res://assets/audio/04 Moves & Hits/REMOVED_AUDIO_38 - Light Attack.wav",
 	"medium_attack":"res://assets/audio/04 Moves & Hits/REMOVED_AUDIO_39 - Medium Attack.wav",
 	"hard_attack":  "res://assets/audio/04 Moves & Hits/REMOVED_AUDIO_40 - Hard Attack1.wav",
@@ -158,6 +162,23 @@ func get_radio_channel_label() -> String:
 	if RADIO_CHANNELS.is_empty():
 		return "NO CHANNELS INSTALLED"
 	return String(RADIO_CHANNELS[_radio_channel_index].get("label", "CHANNEL %02d" % [_radio_channel_index + 1]))
+
+func play_music(name: String, volume: float = 0.7) -> void:
+	if not _music_player or not _streams.has(name):
+		return
+	if _music_player.stream == _streams[name] and _music_player.playing:
+		return
+	_music_player.stream = _streams[name]
+	_music_player.bus = MUSIC_BUS_NAME
+	_music_player.volume_db = linear_to_db(clampf(volume, 0.0, 1.0))
+	_music_player.play()
+
+func stop_music() -> void:
+	if _music_player:
+		_music_player.stop()
+
+func is_music_playing() -> bool:
+	return _music_player != null and _music_player.playing
 
 func _set_bus_volume_percent(bus_name: String, value: int) -> void:
 	var idx := AudioServer.get_bus_index(bus_name)
