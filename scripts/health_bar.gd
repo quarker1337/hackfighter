@@ -111,6 +111,12 @@ func _configure_layout() -> void:
 	else:
 		_fill_x = P2_FILL_X
 		_full_width = P2_FILL_WIDTH
+	# Explicit draw order: track/fill/special fire are clipped under the authored
+	# outline/topbar art. A child with a high z_index can otherwise visually bleed
+	# over the sibling outline in Godot's CanvasItem sorting.
+	track.z_index = 0
+	fill_clip.z_index = 1
+	outline.z_index = 20
 	track.position = Vector2(_fill_x, FILL_INSET_Y)
 	track.size = Vector2(_full_width, FILL_HEIGHT)
 	track.patch_margin_left = 0
@@ -130,6 +136,7 @@ func _configure_layout() -> void:
 	fill.patch_margin_top = 0
 	fill.patch_margin_right = 0
 	fill.patch_margin_bottom = 0
+	fill_clip.clip_contents = true
 	fill_clip.size = Vector2(_full_width, FILL_HEIGHT)
 	if special_fire:
 		special_fire.position = Vector2.ZERO
@@ -256,7 +263,7 @@ func _ensure_special_fire_node() -> void:
 	special_fire.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	special_fire.visible = false
 	special_fire.color = Color.WHITE
-	special_fire.z_index = 4
+	special_fire.z_index = 1
 	var shader := Shader.new()
 	shader.code = """
 shader_type canvas_item;
@@ -294,6 +301,9 @@ void fragment() {
 	special_fire.material = mat
 	fill_clip.add_child(special_fire)
 	fill_clip.move_child(special_fire, fill.get_index() + 1)
+	# Belt-and-suspenders: keep the outline/topbar sibling last and highest.
+	if outline and outline.get_parent() == bar:
+		bar.move_child(outline, bar.get_child_count() - 1)
 
 func _schedule_next_profile_glitch() -> void:
 	_profile_next_glitch_time = _profile_rng.randf_range(PORTRAIT_GLITCH_MIN_DELAY, PORTRAIT_GLITCH_MAX_DELAY)
@@ -395,6 +405,8 @@ func play_special_ready_shine() -> void:
 		flash.tween_method(func(v: float) -> void: mat.set_shader_parameter("damage_flash", v), 1.0, 0.0, 0.36)
 
 func set_special_ready(ready: bool) -> void:
+	if ready == _special_ready:
+		return
 	_special_ready = ready
 	if _special_shine_tween and _special_shine_tween.is_valid():
 		_special_shine_tween.kill()

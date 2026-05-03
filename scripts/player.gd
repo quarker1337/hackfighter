@@ -35,7 +35,10 @@ const LOBSTER_ATTACKS: Dictionary = {
 	# Lobster's 6-frame heavy-punch sheet only extends the arm/claw on frames 5-6.
 	# The sprite loader duplicates the final frame for a tiny hold, so keep the hit
 	# inactive until the claw is visually out and let it stay active through that hold.
-	"heavyPunch":  { "startup": 14, "active": 10, "recovery": 3,  "damage": 160, "hitstun": 28, "blockstun": 12, "pushback": 7, "type": "mid" },
+	"heavyPunch":   { "startup": 14, "active": 10, "recovery": 3,  "damage": 160, "hitstun": 28, "blockstun": 12, "pushback": 7,  "type": "mid" },
+	# Trailer special: Lobster casts through frame 7, snaps back to frame 6 as a
+	# hold pose, then the last 3 authored frames fly forward as a separate projectile.
+	"specialAttack": { "startup": 24, "active": 18, "recovery": 8,  "damage": 260, "hitstun": 34, "blockstun": 16, "pushback": 11, "type": "mid", "knockdown": true },
 }
 
 # ── Animation speeds (JS frames per sprite-frame) ────────────────────
@@ -48,6 +51,7 @@ const ANIM_SPEED: Dictionary = {
 	"heavypunch":   5,
 	"lightkick":    4,
 	"heavykick":    5,
+	"specialattack": 4,
 	"victory":      8,
 	"victory_loop": 8,
 	"abdomen_hit":  4,
@@ -93,7 +97,9 @@ const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 const LOBSTER_ATTACK_HITBOX: Dictionary = {
 	# Tight video-facing claw box: must reach only when Lobster is genuinely in close,
 	# with the impact sitting on the extended claw instead of ahead of it.
-	"heavyPunch":  Rect2(28, -104, 96, 48),
+	"heavyPunch":   Rect2(28, -104, 96, 48),
+	# Local projectile hurt lane, centered on the moving special projectile sprite.
+	"specialAttack": Rect2(-44, -32, 88, 64),
 }
 
 # ── Knockdown / getting up timings (from JS config) ──────────────────
@@ -114,6 +120,11 @@ const RIM_SCALE_BONUS := 1.02
 const RIM_OFFSET := Vector2(0.0, 0.0)
 const RIM_COLOR := Color(0.82, 0.96, 1.0, 0.08)
 const SPECIAL_AURA_TEX_SIZE := Vector2i(128, 224)
+const SPECIAL_PROJECTILE_RELEASE_FRAME := 24
+const SPECIAL_PROJECTILE_TRAVEL_FRAMES := 18
+const SPECIAL_PROJECTILE_START := Vector2(92.0, -106.0)
+const SPECIAL_PROJECTILE_END_X := 258.0
+const SPECIAL_CASTER_HOLD_FRAME := 5
 
 # ── Public state ──────────────────────────────────────────────────────
 var health: int = MAX_HEALTH
@@ -178,6 +189,9 @@ var shadow_base_scale: Vector2 = Vector2.ONE
 var shadow_feet_offset_y: float = SHADOW_FEET_OFFSET_Y
 var rim_sprite: AnimatedSprite2D = null
 var special_aura_sprite: Sprite2D = null
+var special_projectile_sprite: AnimatedSprite2D = null
+var special_projectile_active: bool = false
+var special_projectile_dir: float = 1.0
 
 # Debug overlay — created programmatically
 var debug_overlay: Label = null
@@ -192,6 +206,7 @@ func _ready() -> void:
 	_create_shadow()
 	_create_special_aura()
 	_create_rim_sprite()
+	_create_special_projectile()
 	_apply_character_visuals()
 	sprite.animation_finished.connect(_on_animation_finished)
 	_update_shadow()
@@ -211,6 +226,8 @@ func _apply_character_visuals() -> void:
 	sprite.sprite_frames = frames
 	if rim_sprite:
 		rim_sprite.sprite_frames = frames
+	if special_projectile_sprite:
+		special_projectile_sprite.sprite_frames = frames
 	match character_name.to_lower():
 		"teknium":
 			sprite.position = Vector2.ZERO
@@ -268,6 +285,14 @@ func _create_rim_sprite() -> void:
 	rim_sprite.modulate = RIM_COLOR
 	add_child(rim_sprite)
 	move_child(rim_sprite, sprite.get_index())
+
+func _create_special_projectile() -> void:
+	special_projectile_sprite = AnimatedSprite2D.new()
+	special_projectile_sprite.name = "SpecialProjectile"
+	special_projectile_sprite.z_index = 6
+	special_projectile_sprite.visible = false
+	special_projectile_sprite.centered = true
+	add_child(special_projectile_sprite)
 
 func _create_special_aura() -> void:
 	special_aura_sprite = Sprite2D.new()
@@ -361,12 +386,47 @@ func _update_shadow() -> void:
 	shadow_sprite.position = Vector2(0.0, grounded_shadow_y)
 	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
+func _update_special_projectile() -> void:
+	if current_attack != "specialAttack" or character_name.to_lower() != "lobster":
+		_hide_special_projectile()
+		return
+	if not special_projectile_sprite or not special_projectile_sprite.sprite_frames or not special_projectile_sprite.sprite_frames.has_animation("specialprojectile"):
+		return
+	if attack_frame < SPECIAL_PROJECTILE_RELEASE_FRAME:
+		_hide_special_projectile()
+		return
+
+	# Lobster visibly reaches frame 7, then returns to authored frame 6 and holds
+	# while the projectile leaves the body and travels to the enemy.
+	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("specialattack"):
+		sprite.pause()
+		sprite.frame = min(SPECIAL_CASTER_HOLD_FRAME, sprite.sprite_frames.get_frame_count("specialattack") - 1)
+
+	special_projectile_active = true
+	special_projectile_dir = 1.0 if facing_right else -1.0
+	var travel_frame := clampi(attack_frame - SPECIAL_PROJECTILE_RELEASE_FRAME, 0, SPECIAL_PROJECTILE_TRAVEL_FRAMES)
+	var t := float(travel_frame) / float(SPECIAL_PROJECTILE_TRAVEL_FRAMES)
+	var forward_x := lerpf(SPECIAL_PROJECTILE_START.x, SPECIAL_PROJECTILE_END_X, t)
+	special_projectile_sprite.position = Vector2(forward_x * special_projectile_dir, SPECIAL_PROJECTILE_START.y)
+	special_projectile_sprite.flip_h = special_projectile_dir < 0.0
+	special_projectile_sprite.visible = true
+	if special_projectile_sprite.animation != "specialprojectile" or not special_projectile_sprite.is_playing():
+		special_projectile_sprite.play("specialprojectile")
+
+func _hide_special_projectile() -> void:
+	special_projectile_active = false
+	if special_projectile_sprite:
+		special_projectile_sprite.visible = false
+		special_projectile_sprite.stop()
+
 func _get_local_attack_hitbox() -> Rect2:
 	if current_attack == "":
 		return Rect2()
 	var base: Rect2 = get_attack_hitbox_data(current_attack)
 	if base.size.x == 0:
 		return Rect2()
+	if current_attack == "specialAttack" and special_projectile_active and special_projectile_sprite:
+		return Rect2(special_projectile_sprite.position.x + base.position.x, special_projectile_sprite.position.y + base.position.y, base.size.x, base.size.y)
 	return base if facing_right else Rect2(-(base.position.x + base.size.x), base.position.y, base.size.x, base.size.y)
 
 func _draw() -> void:
@@ -410,13 +470,17 @@ func clear_special_ready() -> void:
 		var mat := special_aura_sprite.material as ShaderMaterial
 		if mat:
 			mat.set_shader_parameter("intensity", 0.0)
+	_hide_special_projectile()
 	if rim_sprite:
 		rim_sprite.modulate = RIM_COLOR
 
 func consume_special_ready() -> void:
-	# Future special-attack animations should call this when the move actually fires.
-	# Until then, the unlocked aura intentionally persists across hits and movement.
-	clear_special_ready()
+	# Spend the charge when the special animation actually fires, but leave a short
+	# afterglow so the trailer shot does not visually snap from aura to plain sprite.
+	hit_streak = 0
+	special_ready = false
+	special_glow_timer = 0.42
+	special_glow_intensity = maxf(special_glow_intensity, 1.0)
 
 func _update_special_glow(delta: float) -> void:
 	if special_glow_timer > 0.0:
@@ -446,9 +510,13 @@ func _update_special_glow(delta: float) -> void:
 func _sync_visual_layers() -> void:
 	if sprite == null:
 		return
-	# Most current sheets face right by default; Lobster starter sheets face left.
-	# Keep gameplay facing semantics intact and only invert the visual flip for Lobster.
-	sprite.flip_h = facing_right if character_name.to_lower() == "lobster" else not facing_right
+	# Most Lobster sheets face left, but the V3 special sheet is authored facing
+	# right. Keep gameplay facing semantics intact and only adjust visual flip.
+	var lobster_authored_right := character_name.to_lower() == "lobster" and current_anim == "specialattack"
+	if character_name.to_lower() == "lobster":
+		sprite.flip_h = not facing_right if lobster_authored_right else facing_right
+	else:
+		sprite.flip_h = not facing_right
 	if special_aura_sprite:
 		special_aura_sprite.position = sprite.position + Vector2(0.0, -82.0)
 	if rim_sprite == null:
@@ -563,7 +631,7 @@ func _physics_process(_delta: float) -> void:
 		elif _get_input_just("kick_light"):
 			_start_attack("lightKick")
 		elif _get_input_just("kick_heavy"):
-			_start_attack("heavyKick")
+			_start_attack("specialAttack" if special_ready and _can_use_special_attack() else "heavyKick")
 
 	# ── Horizontal movement ───────────────────────────────────────────
 	vel_x = 0.0
@@ -627,6 +695,9 @@ func _physics_process(_delta: float) -> void:
 			current_attack = ""
 			attack_frame = 0
 			has_hit = false
+			_hide_special_projectile()
+		else:
+			_update_special_projectile()
 
 	# ── Visual state selection ────────────────────────────────────────
 	if current_attack != "":
@@ -661,6 +732,9 @@ func _physics_process(_delta: float) -> void:
 	_save_prev_ai_input()
 
 # ── Input helpers ─────────────────────────────────────────────────────
+
+func _can_use_special_attack() -> bool:
+	return sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("specialattack") and sprite.sprite_frames.get_frame_count("specialattack") > 0
 
 func _save_prev_ai_input() -> void:
 	_prev_ai_input = ai_input.duplicate()
@@ -701,6 +775,7 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 		var mat := special_aura_sprite.material as ShaderMaterial
 		if mat:
 			mat.set_shader_parameter("intensity", 0.0)
+	_hide_special_projectile()
 	hitstun_timer = 0
 	blockstun_timer = 0
 	is_in_hitstun = false
@@ -767,6 +842,8 @@ func get_attack_hitbox() -> Rect2:
 	var base: Rect2 = get_attack_hitbox_data(current_attack)
 	if base.size.x == 0:
 		return Rect2()
+	if current_attack == "specialAttack" and special_projectile_active and special_projectile_sprite:
+		return Rect2(position.x + special_projectile_sprite.position.x + base.position.x, position.y + special_projectile_sprite.position.y + base.position.y, base.size.x, base.size.y)
 	var dir: float = 1.0 if facing_right else -1.0
 	# When facing left, mirror the hitbox: x offset becomes -(base.x + base.w)
 	var offset_x: float = base.position.x if dir > 0 else -(base.position.x + base.size.x)
@@ -835,8 +912,11 @@ func _start_attack(attack_name: String) -> void:
 		"heavyPunch": "heavypunch",
 		"lightKick":  "lightkick",
 		"heavyKick":  "heavykick",
+		"specialAttack": "specialattack",
 	}
 	_set_animation(anim_map[attack_name])
+	if attack_name == "specialAttack":
+		consume_special_ready()
 	SoundManager.play_attack_swing(attack_name)
 
 # ── Animation (manual frame advance, matching JS) ────────────────────

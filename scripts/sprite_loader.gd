@@ -82,6 +82,7 @@ static func build_lobster_frames() -> SpriteFrames:
 	var lightpunch_tex := load("res://assets/real/characters/lobster/Lobster_Light_Punch_V1-Sheet.png") as Texture2D
 	var heavypunch_tex := load("res://assets/real/characters/lobster/Lobster_Heavy_Punch_V1-Sheet.png") as Texture2D
 	var doublepunch_tex := load("res://assets/real/characters/lobster/Lobster_Double_Punch_V2-Sheet.png") as Texture2D
+	var special_tex := load("res://assets/real/characters/lobster/Lobster_Double_Punch_Special_V3-Sheet.png") as Texture2D
 	var taunt_tex := load("res://assets/real/characters/lobster/Lobster_Taunt_V1-Sheet.png") as Texture2D
 	var hurt_tex := load("res://assets/real/characters/lobster/Lobster_Hurt_V1-Sheet.png") as Texture2D
 	var ko_tex := load("res://assets/real/characters/lobster/Lobster_KO_V1-Sheet.png") as Texture2D
@@ -118,6 +119,14 @@ static func build_lobster_frames() -> SpriteFrames:
 	else:
 		_add_single_frame_anim_from_sheet(frames, "lightkick", walk_tex, 2, 6, 60.0 / 4.0)
 		_add_single_frame_anim_from_sheet(frames, "heavykick", walk_tex, 3, 6, 60.0 / 5.0)
+	if special_tex:
+		# V3 is authored facing right (unlike earlier Lobster sheets) and has 10
+		# frames. Frames 1-7 are Lobster's cast animation; frames 8-10 are the
+		# fiery claw projectile and are rendered as a separate moving sprite.
+		_add_sheet_range_animation(frames, "specialattack", special_tex, 0, 7, 10, 60.0 / 4.0, false)
+		_add_sheet_range_animation(frames, "specialprojectile", special_tex, 7, 3, 10, 24.0, true)
+	else:
+		_add_sheet_animation(frames, "specialattack", doublepunch_tex if doublepunch_tex else walk_tex, 8 if doublepunch_tex else 6, 60.0 / 5.0, false)
 	if taunt_tex:
 		_add_sheet_range_animation(frames, "victory", taunt_tex, 0, 3, 6, 60.0 / 8.0, false)
 		_add_sheet_range_animation(frames, "victory_loop", taunt_tex, 3, 3, 6, 60.0 / 8.0, true)

@@ -360,7 +360,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		attacker.apply_hitstop(HITSTOP_ON_HIT)
 		defender.apply_hitstop(HITSTOP_ON_HIT)
 		SoundManager.play_hit_sound(attacker.current_attack)
-		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick"
+		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick" or attacker.current_attack == "specialAttack"
 		var fatal_hit := defender.health <= 0
 		var impact_pos := _impact_position(attacker, defender)
 		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit, attacker)
@@ -1822,8 +1822,12 @@ func _update_hud() -> void:
 	# Health bars
 	if p1_health_widget and p1_health_widget.has_method("set_health"):
 		p1_health_widget.set_health(p1.health)
+		if p1_health_widget.has_method("set_special_ready"):
+			p1_health_widget.set_special_ready(p1.special_ready)
 	if p2_health_widget and p2_health_widget.has_method("set_health"):
 		p2_health_widget.set_health(p2.health)
+		if p2_health_widget.has_method("set_special_ready"):
+			p2_health_widget.set_special_ready(p2.special_ready)
 
 	timer_label.text = "%02d" % int(ceil(round_time_left))
 	if round_time_left <= 10.0 and not intro_active:

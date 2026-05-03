@@ -210,7 +210,9 @@ func _play_stream(stream: AudioStream, volume: float) -> void:
 
 ## Attack swing sound — matches JS: punches play light_attack, kicks play medium_attack.
 func play_attack_swing(attack_name: String) -> void:
-	if attack_name == "lightPunch" or attack_name == "heavyPunch":
+	if attack_name == "specialAttack":
+		play("hard_attack", 0.75)
+	elif attack_name == "lightPunch" or attack_name == "heavyPunch":
 		play("light_attack", 0.6)
 	else:
 		play("medium_attack", 0.6)
@@ -222,6 +224,7 @@ func play_hit_sound(attack_name: String) -> void:
 		"heavyPunch": "fierce_hit",
 		"lightKick":  "short_hit",
 		"heavyKick":  "roundhouse_hit",
+		"specialAttack": "fierce_hit",
 	}
 	if hit_sounds.has(attack_name):
 		play(hit_sounds[attack_name], 0.8)
