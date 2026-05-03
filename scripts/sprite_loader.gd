@@ -22,6 +22,7 @@ static func build_teknium_frames() -> SpriteFrames:
 	var lightkick_tex := load("res://assets/real/characters/teknium/Teknium_Lightkick_V2-Sheet.png") as Texture2D
 	var heavypunch_tex := load("res://assets/real/characters/teknium/Teknium_Heavy_punch_V1-Sheet.png") as Texture2D
 	var heavykick_tex := load("res://assets/real/characters/teknium/Teknium_High_Kick_V1-Sheet.png") as Texture2D
+	var special_tex := load("res://assets/real/characters/teknium/Teknium_Special_V1-Sheet.png") as Texture2D
 	var victory_tex := load("res://assets/real/characters/teknium/Teknium_Victory_V1-Sheet.png") as Texture2D
 	var hurt_tex := load("res://assets/real/characters/teknium/Teknium_Hurt_V3-Sheet.png") as Texture2D
 	var ko_tex := load("res://assets/real/characters/teknium/Teknium_KO_V1-Sheet.png") as Texture2D
@@ -53,6 +54,12 @@ static func build_teknium_frames() -> SpriteFrames:
 		_add_sheet_animation(frames, "heavykick", heavykick_tex, 8, 19.2, false)
 	else:
 		_add_single_frame_anim_from_sheet(frames, "heavykick", idle_tex, 5, 8, 60.0 / 5.0)
+	if special_tex:
+		# 10-frame special sheet matching Lobster's split format:
+		# frames 1-7 are Teknium's caster animation, frames 8-10 are the
+		# standalone green projectile rendered as a separate moving sprite.
+		_add_sheet_range_animation(frames, "specialattack", special_tex, 0, 7, 10, 60.0 / 4.0, false)
+		_add_sheet_range_animation(frames, "specialprojectile", special_tex, 7, 3, 10, 24.0, true)
 	if victory_tex:
 		_add_sheet_range_animation(frames, "victory", victory_tex, 0, 4, 11, 60.0 / 8.0, false)
 		_add_sheet_range_animation(frames, "victory_loop", victory_tex, 4, 7, 11, 60.0 / 8.0, true)

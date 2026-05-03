@@ -26,9 +26,12 @@ const ATTACKS: Dictionary = {
 
 const TEKNIUM_ATTACKS: Dictionary = {
 	"heavyPunch":  { "startup": 3,  "active": 5, "recovery": 13, "damage": 80,  "hitstun": 16, "blockstun": 10, "pushback": 4, "type": "mid" },
-	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7,  "pushback": 3, "type": "mid" },
+	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7, "pushback": 3, "type": "mid" },
 	# Teknium's asset is a high/roundhouse-style kick, not the old Prototype low sweep.
 	"heavyKick":   { "startup": 7,  "active": 4, "recovery": 14, "damage": 100, "hitstun": 20, "blockstun": 12, "pushback": 5, "type": "mid", "knockdown": true },
+	# Trailer special: same split format as Lobster. Frames 1-7 cast, frames 8-10
+	# become a moving green projectile with the hitbox centered on it.
+	"specialAttack": { "startup": 24, "active": 18, "recovery": 8,  "damage": 240, "hitstun": 32, "blockstun": 15, "pushback": 10, "type": "mid", "knockdown": true },
 }
 
 const LOBSTER_ATTACKS: Dictionary = {
@@ -92,6 +95,7 @@ const TEKNIUM_ATTACK_HITBOX: Dictionary = {
 	# instead of the inherited old low sweep box, which slipped under standing hurtboxes.
 	# Front reach is trimmed so it does not connect on Lobster's extended claw pixels.
 	"heavyKick":   Rect2(4, -112, 82, 44),
+	"specialAttack": Rect2(-40, -30, 80, 60),
 }
 
 const LOBSTER_ATTACK_HITBOX: Dictionary = {
@@ -192,6 +196,7 @@ var special_aura_sprite: Sprite2D = null
 var special_projectile_sprite: AnimatedSprite2D = null
 var special_projectile_active: bool = false
 var special_projectile_dir: float = 1.0
+var special_projectile_impacted: bool = false
 
 # Debug overlay — created programmatically
 var debug_overlay: Label = null
@@ -387,7 +392,11 @@ func _update_shadow() -> void:
 	shadow_sprite.modulate = Color(1.0, 1.0, 1.0, lerpf(SHADOW_GROUND_ALPHA, SHADOW_AIR_ALPHA, height_ratio))
 
 func _update_special_projectile() -> void:
-	if current_attack != "specialAttack" or character_name.to_lower() != "lobster":
+	if current_attack != "specialAttack" or not _has_split_special_projectile():
+		_hide_special_projectile()
+		special_projectile_impacted = false
+		return
+	if special_projectile_impacted:
 		_hide_special_projectile()
 		return
 	if not special_projectile_sprite or not special_projectile_sprite.sprite_frames or not special_projectile_sprite.sprite_frames.has_animation("specialprojectile"):
@@ -396,7 +405,7 @@ func _update_special_projectile() -> void:
 		_hide_special_projectile()
 		return
 
-	# Lobster visibly reaches frame 7, then returns to authored frame 6 and holds
+	# Split specials visibly reach frame 7, then return to authored frame 6 and hold
 	# while the projectile leaves the body and travels to the enemy.
 	if sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("specialattack"):
 		sprite.pause()
@@ -419,6 +428,17 @@ func _hide_special_projectile() -> void:
 		special_projectile_sprite.visible = false
 		special_projectile_sprite.stop()
 
+func finish_special_projectile_on_hit() -> void:
+	if current_attack != "specialAttack" or not _has_split_special_projectile():
+		return
+	special_projectile_impacted = true
+	_hide_special_projectile()
+
+func get_special_projectile_world_position() -> Vector2:
+	if special_projectile_sprite:
+		return position + special_projectile_sprite.position
+	return position
+
 func _get_local_attack_hitbox() -> Rect2:
 	if current_attack == "":
 		return Rect2()
@@ -428,6 +448,9 @@ func _get_local_attack_hitbox() -> Rect2:
 	if current_attack == "specialAttack" and special_projectile_active and special_projectile_sprite:
 		return Rect2(special_projectile_sprite.position.x + base.position.x, special_projectile_sprite.position.y + base.position.y, base.size.x, base.size.y)
 	return base if facing_right else Rect2(-(base.position.x + base.size.x), base.position.y, base.size.x, base.size.y)
+
+func _has_split_special_projectile() -> bool:
+	return character_name.to_lower() in ["lobster", "teknium"]
 
 func _draw() -> void:
 	if not debug_overlay_enabled:
@@ -608,7 +631,10 @@ func _physics_process(_delta: float) -> void:
 	if current_attack == "" and not in_jump:
 		var wants_back := (facing_right and wants_left) or (not facing_right and wants_right)
 		var opponent_attacking := other_player != null and other_player.current_attack != ""
-		if wants_back and opponent_attacking:
+		var force_retreat := bool(ai_input.get("force_retreat", false))
+		# CPU demo runway retreat must keep moving during Lobster's projectile special.
+		# Otherwise normal back input turns into block and the AI plants/glues to P1.
+		if wants_back and opponent_attacking and not force_retreat:
 			is_blocking = true
 			if wants_down:
 				block_type = "crouch"
@@ -635,12 +661,15 @@ func _physics_process(_delta: float) -> void:
 
 	# ── Horizontal movement ───────────────────────────────────────────
 	vel_x = 0.0
+	var horizontal_speed := WALK_SPEED
+	if bool(ai_input.get("force_retreat", false)):
+		horizontal_speed = WALK_SPEED * 1.65
 	if current_attack == "" or in_jump:
 		if not is_blocking and not wants_down:
 			if wants_right and not wants_left:
-				vel_x = WALK_SPEED
+				vel_x = horizontal_speed
 			elif wants_left and not wants_right:
-				vel_x = -WALK_SPEED
+				vel_x = -horizontal_speed
 
 	# ── Apply movement ────────────────────────────────────────────────
 	position.x += vel_x
@@ -695,6 +724,7 @@ func _physics_process(_delta: float) -> void:
 			current_attack = ""
 			attack_frame = 0
 			has_hit = false
+			special_projectile_impacted = false
 			_hide_special_projectile()
 		else:
 			_update_special_projectile()
@@ -906,6 +936,7 @@ func _start_attack(attack_name: String) -> void:
 	current_attack = attack_name
 	attack_frame = 0
 	has_hit = false
+	special_projectile_impacted = false
 
 	var anim_map: Dictionary = {
 		"lightPunch": "lightpunch",

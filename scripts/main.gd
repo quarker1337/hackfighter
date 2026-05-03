@@ -347,7 +347,11 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		attacker.apply_hitstop(HITSTOP_ON_BLOCK)
 		defender.apply_hitstop(HITSTOP_ON_BLOCK)
 		SoundManager.play_block_sound()
-		_spawn_hit_fx(_impact_position(attacker, defender), true, false, attacker)
+		var impact_pos := _impact_position(attacker, defender)
+		if attacker.current_attack == "specialAttack":
+			impact_pos = attacker.get_special_projectile_world_position()
+			attacker.finish_special_projectile_on_hit()
+		_spawn_hit_fx(impact_pos, true, true, attacker)
 		_trigger_signal_hit_glitch(0.45, 0.12)
 		_trigger_impact_flash(Color(0.85, 0.92, 1.0, 1.0), 0.10)
 	else:
@@ -363,6 +367,9 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		var heavy_hit := attacker.current_attack == "heavyPunch" or attacker.current_attack == "heavyKick" or attacker.current_attack == "specialAttack"
 		var fatal_hit := defender.health <= 0
 		var impact_pos := _impact_position(attacker, defender)
+		if attacker.current_attack == "specialAttack":
+			impact_pos = attacker.get_special_projectile_world_position()
+			attacker.finish_special_projectile_on_hit()
 		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit, attacker)
 		_trigger_signal_hit_glitch(1.0 if fatal_hit else (0.78 if heavy_hit else 0.56), 0.18 if fatal_hit else (0.15 if heavy_hit else 0.10))
 		if fatal_hit:

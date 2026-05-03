@@ -44,6 +44,34 @@ func get_input(self_player: Player, opponent: Player) -> Dictionary:
 	# can look like it ignores block even on HARD.
 	var settings := _settings()
 	var dist: float = absf(self_player.position.x - opponent.position.x)
+
+	# Trailer/demo spacing: split-projectile specials need visible runway.
+	# Important: CPU projectile fighters should NOT back off before charging special.
+	# They should fight normally, land 3 hits, then create distance and fire.
+	var projectile_fighters := ["lobster", "teknium"]
+	var self_key := self_player.character_name.to_lower()
+	var opponent_key := opponent.character_name.to_lower()
+	var self_has_projectile_special := projectile_fighters.has(self_key)
+	var opponent_has_projectile_special := projectile_fighters.has(opponent_key)
+	var opponent_projectile_special_threat := opponent_has_projectile_special and (opponent.special_ready or opponent.current_attack == "specialAttack")
+	var self_projectile_special_threat := self_has_projectile_special and self_player.special_ready
+	var needs_projectile_runway := opponent_projectile_special_threat or self_projectile_special_threat
+	var backoff_distance := 112.0
+	if needs_projectile_runway:
+		backoff_distance = 315.0
+	if needs_projectile_runway and dist < backoff_distance:
+		if randf() < 1.0:
+			# Use a separate action so Player can treat this as evasive movement,
+			# not normal "hold back to block" while a projectile special is active.
+			current_action = "demo_runway_retreat"
+			decision_timer = 16 + (randi() % 12)
+			return _action_to_input(current_action, self_player, opponent)
+	elif self_projectile_special_threat and dist >= backoff_distance:
+		# Once the CPU has charged special and made space, fire from range.
+		current_action = "heavyKick"
+		decision_timer = 6
+		return _action_to_input(current_action, self_player, opponent)
+
 	if opponent.current_attack != "" and dist < 135.0 and randf() < float(settings["block_chance"]):
 		current_action = "block"
 		decision_timer = min(decision_timer, 4)
@@ -118,8 +146,10 @@ func _action_to_input(action: String, self_player: Player, opponent: Player) -> 
 	match action:
 		"walk_forward":
 			input[forward] = true
-		"walk_backward":
+		"walk_backward", "demo_runway_retreat":
 			input[backward] = true
+			if action == "demo_runway_retreat":
+				input["force_retreat"] = true
 		"block":
 			input[backward] = true
 			if randf() < 0.4:
