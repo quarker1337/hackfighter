@@ -79,6 +79,13 @@ var menu_panel: Panel = null
 var menu_scanlines: Array[ColorRect] = []
 var menu_global_scanlines: Array[ColorRect] = []
 var menu_crt_overlay: ColorRect = null
+var gameplay_pixel_shift_overlay: ColorRect = null
+var crt_vignette_overlay: ColorRect = null
+var gameplay_pixel_shift_time: float = 0.0
+var signal_glitch_visibility: float = 1.0
+var signal_glitch_suppress_timer: float = 0.0
+var signal_hit_glitch_timer: float = 0.0
+var signal_hit_glitch_strength: float = 0.0
 var menu_title_label: Label = null
 var menu_subtitle_label: Label = null
 var menu_body_label: Label = null
@@ -187,6 +194,12 @@ func _ready() -> void:
 	_create_hud()
 	_create_menu_ui()
 	_create_boot_intro_ui()
+	# Keep the LCD proof overlay as the final UI child so it affects menus/select/game,
+	# not just gameplay behind the menu panels.
+	_create_gameplay_pixel_shift_overlay()
+	# Keep the vignette as a plain alpha overlay above the screen-reading glitch shader;
+	# this avoids SCREEN_UV/SubViewport/camera-space mismatches hiding the CRT border.
+	_create_crt_vignette_overlay()
 	SoundManager.set_sfx_volume_percent(option_sfx_volume)
 	SoundManager.set_music_volume_percent(option_music_volume)
 	SoundManager.set_radio_channel(option_radio_index)
@@ -200,6 +213,7 @@ func _process(delta: float) -> void:
 	_update_camera_fx(delta)
 	_update_impact_flash(delta)
 	_update_hit_fx(delta)
+	_update_gameplay_pixel_shift_overlay(delta)
 	_update_start_banner(delta)
 	_update_combat_overlay(delta)
 	_update_boot_intro(delta)
@@ -333,6 +347,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		defender.apply_hitstop(HITSTOP_ON_BLOCK)
 		SoundManager.play_block_sound()
 		_spawn_hit_fx(_impact_position(attacker, defender), true, false, attacker)
+		_trigger_signal_hit_glitch(0.45, 0.12)
 		_trigger_impact_flash(Color(0.85, 0.92, 1.0, 1.0), 0.10)
 	else:
 		# Clean hit
@@ -347,6 +362,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		var fatal_hit := defender.health <= 0
 		var impact_pos := _impact_position(attacker, defender)
 		_spawn_hit_fx(impact_pos, false, heavy_hit or fatal_hit, attacker)
+		_trigger_signal_hit_glitch(1.0 if fatal_hit else (0.78 if heavy_hit else 0.56), 0.18 if fatal_hit else (0.15 if heavy_hit else 0.10))
 		if fatal_hit:
 			_spawn_hit_fx(impact_pos + Vector2(push_dir * -8.0, -10.0), false, true, attacker)
 			_trigger_camera_shake(0.26, 7.0)
@@ -392,11 +408,18 @@ func _apply_camera_tracking(force_snap: bool = false) -> void:
 	desired_cam_left = clampf(desired_cam_left, stage_left_min, max_left)
 	var effective_cam_left := desired_cam_left if force_snap else lerpf(current_cam_left, desired_cam_left, CAMERA_PAN_SPEED * (1.0 / 60.0))
 	effective_cam_left = clampf(effective_cam_left, stage_left_min, max_left)
+	var camera_pan_delta := absf(effective_cam_left - current_cam_left)
 	var shake_offset := _get_camera_shake_offset() if not force_snap else Vector2.ZERO
 	camera.position.x = effective_cam_left + VISIBLE_WIDTH / 2.0 + shake_offset.x
 	camera.position.y = CAMERA_Y + shake_offset.y
+	if not force_snap and (camera_pan_delta > 0.08 or camera_shake_timer > 0.0 or camera_shake_strength > 0.10):
+		signal_glitch_suppress_timer = maxf(signal_glitch_suppress_timer, 0.28)
 	if stage and stage.has_method("set_camera_left"):
 		stage.set_camera_left(effective_cam_left)
+
+func _trigger_signal_hit_glitch(strength: float, duration: float) -> void:
+	signal_hit_glitch_strength = maxf(signal_hit_glitch_strength, strength)
+	signal_hit_glitch_timer = maxf(signal_hit_glitch_timer, duration)
 
 func _trigger_camera_shake(duration: float, strength: float) -> void:
 	camera_shake_timer = maxf(camera_shake_timer, duration)
@@ -981,6 +1004,147 @@ void fragment() {
 	menu_crt_overlay.material = crt_mat
 	_ui_add_child(menu_crt_overlay)
 
+func _create_gameplay_pixel_shift_overlay() -> void:
+	gameplay_pixel_shift_overlay = ColorRect.new()
+	gameplay_pixel_shift_overlay.name = "SignalStaticGlitchOverlay"
+	gameplay_pixel_shift_overlay.position = Vector2.ZERO
+	gameplay_pixel_shift_overlay.size = Vector2(SCREEN_WIDTH, SCREEN_HEIGHT)
+	gameplay_pixel_shift_overlay.color = Color(1, 1, 1, 1)
+	gameplay_pixel_shift_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	gameplay_pixel_shift_overlay.visible = false
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+render_mode unshaded;
+
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_nearest;
+uniform float time_offset = 0.0;
+uniform float distortion_strength = 0.0032;
+uniform float static_strength = 0.038;
+uniform float patch_strength = 0.66;
+uniform float scanline_strength = 0.032;
+uniform float glitch_visibility = 1.0;
+
+float hash(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float rect_mask(vec2 uv, vec2 center, vec2 half_size, float feather) {
+	vec2 d = abs(uv - center) - half_size;
+	float outside = length(max(d, vec2(0.0)));
+	float inside = min(max(d.x, d.y), 0.0);
+	return 1.0 - smoothstep(0.0, feather, outside + inside);
+}
+
+void fragment() {
+	vec2 uv = SCREEN_UV;
+	float tick = floor(time_offset * 6.0);
+	float slow_tick = floor(time_offset * 1.35);
+	vec2 px = vec2(1.0 / 512.0, 1.0 / 288.0);
+
+	// Static-distortion direction: visible in motion, but mostly localized.
+	// This is closer to the earlier signal pass than the too-subtle pixel LCD pass.
+	float edge = smoothstep(0.64, 0.98, abs(UV.x - 0.5) * 2.0);
+	float band_a = rect_mask(UV, vec2(0.18 + 0.06 * hash(vec2(slow_tick, 1.0)), 0.24 + 0.18 * hash(vec2(slow_tick, 2.0))), vec2(0.11, 0.020), 0.012);
+	float band_b = rect_mask(UV, vec2(0.74 + 0.08 * hash(vec2(slow_tick, 3.0)), 0.54 + 0.22 * hash(vec2(slow_tick, 4.0))), vec2(0.15, 0.026), 0.014);
+	float chip_a = rect_mask(UV, vec2(0.08 + 0.84 * hash(vec2(slow_tick, 5.0)), 0.14 + 0.72 * hash(vec2(slow_tick, 6.0))), vec2(0.030, 0.050), 0.010);
+	float patch = max(max(band_a, band_b), chip_a * 0.72);
+	float burst_gate = step(0.56, hash(vec2(tick, slow_tick + 17.0)));
+	patch *= burst_gate * glitch_visibility;
+
+	float row_noise = hash(vec2(floor(UV.y * 120.0), tick));
+	float wobble = (row_noise - 0.5) * distortion_strength * (0.35 + patch * patch_strength + edge * 0.25);
+	vec2 sample_uv = uv + vec2(wobble, 0.0);
+
+	vec3 base = texture(screen_texture, sample_uv).rgb;
+	vec3 col = base;
+
+	float grain = hash(floor(UV * vec2(512.0, 288.0)) + vec2(tick * 19.0, tick * 7.0)) - 0.5;
+	float scanline = sin((UV.y * 288.0 + time_offset * 16.0) * 3.14159);
+	float scan = scanline * scanline_strength;
+	float noise_mask = (0.16 + patch * 1.20 + edge * 0.18) * (0.35 + glitch_visibility * 0.65);
+	col += vec3(grain * static_strength * noise_mask);
+	col -= vec3(scan * 0.032);
+
+	// Short chroma smear inside patches only; this makes the glitch readable without
+	// returning to random pixel snow.
+	vec3 shifted = col;
+	shifted.r = texture(screen_texture, sample_uv + vec2(px.x * (1.0 + patch * 3.0), 0.0)).r;
+	shifted.b = texture(screen_texture, sample_uv - vec2(px.x * (1.0 + patch * 3.0), 0.0)).b;
+	col = mix(col, shifted + vec3(0.035, 0.0, 0.070) * patch, patch * 0.58);
+
+	// Broken LCD edge twitch, intentionally not full-screen.
+	float edge_spark = step(0.982, hash(vec2(floor(UV.y * 72.0), tick * 3.0))) * edge * glitch_visibility;
+	col += vec3(0.060, 0.16, 0.20) * edge_spark * 0.20;
+
+	// The actual CRT border is a separate alpha overlay above this screen-reading
+	// shader. Keeping it separate avoids UV/camera/subviewport ambiguity here.
+	COLOR = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	gameplay_pixel_shift_overlay.material = mat
+	_ui_add_child(gameplay_pixel_shift_overlay)
+
+func _create_crt_vignette_overlay() -> void:
+	crt_vignette_overlay = ColorRect.new()
+	crt_vignette_overlay.name = "CRTRoundedVignetteOverlay"
+	crt_vignette_overlay.position = Vector2.ZERO
+	crt_vignette_overlay.size = Vector2(SCREEN_WIDTH, SCREEN_HEIGHT)
+	crt_vignette_overlay.color = Color(1, 1, 1, 1)
+	crt_vignette_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crt_vignette_overlay.visible = false
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+render_mode unshaded, blend_mix;
+
+uniform float vignette_strength = 0.36;
+uniform float edge_strength = 0.114;
+uniform vec4 vignette_color : source_color = vec4(0.0, 0.008, 0.012, 1.0);
+
+void fragment() {
+	vec2 uv = UV;
+	vec2 centered = uv - vec2(0.5);
+	vec2 lens = centered * vec2(1.0, 1.42);
+	float radial = length(lens);
+	float corner = smoothstep(0.36, 0.72, radial);
+	float edge_x = smoothstep(0.38, 0.50, abs(centered.x));
+	float edge_y = smoothstep(0.38, 0.50, abs(centered.y));
+	float edge = max(edge_x, edge_y) * edge_strength;
+	float alpha = clamp(corner * vignette_strength + edge, 0.0, 0.42);
+	COLOR = vec4(vignette_color.rgb, alpha);
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = shader
+	crt_vignette_overlay.material = mat
+	_ui_add_child(crt_vignette_overlay)
+
+func _update_gameplay_pixel_shift_overlay(delta: float) -> void:
+	if not gameplay_pixel_shift_overlay:
+		return
+	gameplay_pixel_shift_time += delta
+	if signal_glitch_suppress_timer > 0.0:
+		signal_glitch_suppress_timer = maxf(0.0, signal_glitch_suppress_timer - delta)
+	if signal_hit_glitch_timer > 0.0:
+		signal_hit_glitch_timer = maxf(0.0, signal_hit_glitch_timer - delta)
+	else:
+		signal_hit_glitch_strength = move_toward(signal_hit_glitch_strength, 0.0, delta * 7.0)
+	var ambient_glitch_visibility := 0.05 if app_state != AppState.GAME else 0.42
+	if signal_glitch_suppress_timer > 0.0:
+		ambient_glitch_visibility = 0.0
+	var target_glitch_visibility := maxf(ambient_glitch_visibility, signal_hit_glitch_strength)
+	signal_glitch_visibility = move_toward(signal_glitch_visibility, target_glitch_visibility, delta * 8.0)
+	gameplay_pixel_shift_overlay.visible = not boot_intro_active
+	if crt_vignette_overlay:
+		crt_vignette_overlay.visible = not boot_intro_active
+	if gameplay_pixel_shift_overlay.material is ShaderMaterial:
+		var mat := gameplay_pixel_shift_overlay.material as ShaderMaterial
+		mat.set_shader_parameter("time_offset", gameplay_pixel_shift_time)
+		mat.set_shader_parameter("glitch_visibility", signal_glitch_visibility)
+
 func _create_boot_intro_ui() -> void:
 	boot_overlay = ColorRect.new()
 	boot_overlay.name = "HackfighterBootIntro"
@@ -1315,6 +1479,8 @@ func _update_start_banner(delta: float) -> void:
 
 func _set_game_hud_visible(vis: bool) -> void:
 	var nodes = [
+		gameplay_pixel_shift_overlay,
+		crt_vignette_overlay,
 		impact_flash,
 		p1_health_widget, p2_health_widget,
 		timer_backplate, timer_bg, timer_label,
