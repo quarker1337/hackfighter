@@ -19,6 +19,7 @@ static func build_teknium_frames() -> SpriteFrames:
 	var walk_tex := load("res://assets/real/characters/teknium/Teknium_Walking_V2-Sheet.png") as Texture2D
 	var crouch_tex := load("res://assets/real/characters/teknium/Teknium_Crouch_V1-Sheet.png") as Texture2D
 	var jump_tex := load("res://assets/real/characters/teknium/Teknium_Jump_V2-Sheet.png") as Texture2D
+	var lightpunch_tex := load("res://assets/real/characters/teknium/Teknium_Light_punch_V1-Sheet.png") as Texture2D
 	var lightkick_tex := load("res://assets/real/characters/teknium/Teknium_Lightkick_V2-Sheet.png") as Texture2D
 	var heavypunch_tex := load("res://assets/real/characters/teknium/Teknium_Heavy_punch_V1-Sheet.png") as Texture2D
 	var heavykick_tex := load("res://assets/real/characters/teknium/Teknium_High_Kick_V1-Sheet.png") as Texture2D
@@ -41,7 +42,14 @@ static func build_teknium_frames() -> SpriteFrames:
 		_add_sheet_animation(frames, "crouching", crouch_tex, 6, 60.0 / 4.0, false)
 	else:
 		_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 1, 8, 60.0 / 4.0)
-	_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 8, 60.0 / 4.0, false)
+	if lightpunch_tex:
+		# 5-frame authored light punch; frame 5 is the readable contact pose.
+		# Hold it briefly, matching Lobster's trailer-readability treatment.
+		_add_sheet_animation(frames, "lightpunch", lightpunch_tex, 5, 60.0 / 4.0, false)
+		frames.add_frame("lightpunch", frames.get_frame_texture("lightpunch", 4))
+		frames.add_frame("lightpunch", frames.get_frame_texture("lightpunch", 4))
+	else:
+		_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 8, 60.0 / 4.0, false)
 	if heavypunch_tex:
 		_add_sheet_animation(frames, "heavypunch", heavypunch_tex, 6, 18.0, false)
 	else:
@@ -109,7 +117,11 @@ static func build_lobster_frames() -> SpriteFrames:
 	else:
 		_add_single_frame_anim_from_sheet(frames, "crouching", idle_tex, 2, 5, 60.0 / 4.0)
 	if lightpunch_tex:
+		# Lobster's light punch is only 5 frames and the real read is frame 5.
+		# Duplicate the final frame twice so the claw extension sticks for trailer capture.
 		_add_sheet_animation(frames, "lightpunch", lightpunch_tex, 5, 60.0 / 4.0, false)
+		frames.add_frame("lightpunch", frames.get_frame_texture("lightpunch", 4))
+		frames.add_frame("lightpunch", frames.get_frame_texture("lightpunch", 4))
 	else:
 		_add_sheet_range_animation(frames, "lightpunch", idle_tex, 2, 2, 5, 60.0 / 4.0, false)
 	if heavypunch_tex:

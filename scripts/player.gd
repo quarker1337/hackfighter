@@ -25,6 +25,9 @@ const ATTACKS: Dictionary = {
 }
 
 const TEKNIUM_ATTACKS: Dictionary = {
+	# Teknium's 5-frame authored light punch also reads on frame 5; keep the
+	# state alive through the duplicated hold frames without changing damage.
+	"lightPunch":  { "startup": 14, "active": 8,  "recovery": 6,  "damage": 30,  "hitstun": 10, "blockstun": 6,  "pushback": 2, "type": "mid" },
 	"heavyPunch":  { "startup": 3,  "active": 5, "recovery": 13, "damage": 80,  "hitstun": 16, "blockstun": 10, "pushback": 4, "type": "mid" },
 	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7, "pushback": 3, "type": "mid" },
 	# Teknium's asset is a high/roundhouse-style kick, not the old Prototype low sweep.
@@ -35,6 +38,10 @@ const TEKNIUM_ATTACKS: Dictionary = {
 }
 
 const LOBSTER_ATTACKS: Dictionary = {
+	# Lobster's 5-frame light-punch sheet reads only on frame 5. Hold the attack
+	# long enough for the duplicated final frame to be visible instead of snapping
+	# back to idle before the punch is readable.
+	"lightPunch":   { "startup": 14, "active": 8,  "recovery": 6,  "damage": 30,  "hitstun": 10, "blockstun": 6,  "pushback": 2,  "type": "mid" },
 	# Lobster's 6-frame heavy-punch sheet only extends the arm/claw on frames 5-6.
 	# The sprite loader duplicates the final frame for a tiny hold, so keep the hit
 	# inactive until the claw is visually out and let it stay active through that hold.
