@@ -7,8 +7,9 @@ extends Node
 # ── Audio bus names ────────────────────────────────────────────────────
 const SFX_BUS_NAME := "SFX"
 const MUSIC_BUS_NAME := "Music"
-const DEFAULT_SFX_VOLUME_PERCENT := 60
-const DEFAULT_MUSIC_VOLUME_PERCENT := 70
+const DEFAULT_SFX_VOLUME_PERCENT := 100
+const DEFAULT_MUSIC_VOLUME_PERCENT := 100
+const MAX_LOCAL_GAIN := 6.0
 
 # ── Sound manifest ─────────────────────────────────────────────────────
 const MANIFEST: Dictionary = {
@@ -106,7 +107,15 @@ func _load_sounds() -> void:
 func play(name: String, volume: float = 1.0) -> void:
 	if not _streams.has(name):
 		return
+	_play_web_audio_bridge(name, volume)
 	_play_stream(_streams[name], volume)
+
+func _play_web_audio_bridge(name: String, volume: float) -> void:
+	if not OS.has_feature("web"):
+		return
+	var safe_name := JSON.stringify(name)
+	var safe_volume := String.num(clampf(volume, 0.0, MAX_LOCAL_GAIN), 3)
+	JavaScriptBridge.eval("if (window.hackfighterPlayGameSound) window.hackfighterPlayGameSound(" + safe_name + "," + safe_volume + ");", true)
 
 ## Play the current Hackfighter announcer round call.
 func play_round_call(round_number: int, volume: float = 0.75) -> void:
@@ -170,7 +179,7 @@ func play_music(name: String, volume: float = 0.7) -> void:
 		return
 	_music_player.stream = _streams[name]
 	_music_player.bus = MUSIC_BUS_NAME
-	_music_player.volume_db = linear_to_db(clampf(volume, 0.0, 1.0))
+	_music_player.volume_db = linear_to_db(clampf(volume, 0.0, MAX_LOCAL_GAIN))
 	_music_player.play()
 
 func stop_music() -> void:

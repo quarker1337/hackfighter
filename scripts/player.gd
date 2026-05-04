@@ -64,6 +64,8 @@ const ANIM_SPEED: Dictionary = {
 	"specialattack": 4,
 	"victory":      8,
 	"victory_loop": 8,
+	"downed_final": 8,
+	"downed_round": 8,
 	"abdomen_hit":  4,
 	"head_hit":     4,
 	"ko":           6,
@@ -165,6 +167,7 @@ var pending_pushback: float = 0.0
 var knockdown_timer: int = 0
 var is_knocked_down: bool = false
 var getting_up_timer: int = 0
+var pending_downed_anim: String = "downed_final"
 
 # Block state
 var is_blocking: bool = false
@@ -188,6 +191,7 @@ var hitstop_frames: int = 0
 var current_anim: String = "idle"
 var anim_frame: int = 0
 var anim_timer: int = 0
+var round_end_landing_anim: String = ""
 
 # Crouch sub-state
 var crouch_phase: String = ""  # "entering", "holding", "exiting"
@@ -540,9 +544,10 @@ func _update_special_glow(delta: float) -> void:
 func _sync_visual_layers() -> void:
 	if sprite == null:
 		return
-	# Most Lobster sheets face left, but the V3 special sheet is authored facing
-	# right. Keep gameplay facing semantics intact and only adjust visual flip.
-	var lobster_authored_right := character_name.to_lower() == "lobster" and current_anim == "specialattack"
+	# Most Lobster sheets use the default left-authored flip, but a few sheets are
+	# authored opposite relative to that set. Keep gameplay facing semantics intact
+	# and only adjust visual flip per animation.
+	var lobster_authored_right := character_name.to_lower() == "lobster" and current_anim in ["specialattack", "downed_final", "downed_round"]
 	if character_name.to_lower() == "lobster":
 		sprite.flip_h = not facing_right if lobster_authored_right else facing_right
 	else:
@@ -578,6 +583,7 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	if not control_enabled:
+		_advance_round_end_landing()
 		_update_shadow()
 		_update_debug_overlay()
 		_sync_visual_layers()
@@ -800,6 +806,7 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 	current_attack = ""
 	attack_frame = 0
 	has_hit = false
+	round_end_landing_anim = ""
 	hit_streak = 0
 	special_ready = false
 	special_glow_timer = 0.0
@@ -821,6 +828,7 @@ func reset_for_new_round(spawn_x: float, spawn_y: float, face_right: bool) -> vo
 	knockdown_timer = 0
 	is_knocked_down = false
 	getting_up_timer = 0
+	pending_downed_anim = "downed_final"
 	is_blocking = false
 	block_type = ""
 	pushback_dir = 0.0
@@ -917,6 +925,63 @@ func apply_hit(damage: int, hitstun_frames: int, pushback: float, knockdown: boo
 
 	took_damage.emit(damage)
 
+func set_downed_loop(final_elimination: bool) -> void:
+	pending_downed_anim = "downed_final" if final_elimination else "downed_round"
+	if current_anim != "ko" and sprite.sprite_frames and sprite.sprite_frames.has_animation(pending_downed_anim) and sprite.sprite_frames.get_frame_count(pending_downed_anim) > 0:
+		_set_animation(pending_downed_anim)
+
+func prepare_round_end_pose(target_anim: String) -> void:
+	# Round-over freezes input, but must not freeze fighters mid-jump for the
+	# trailer shot. Let the jump finish naturally, then switch into KO/victory.
+	round_end_landing_anim = target_anim
+	current_attack = ""
+	attack_frame = 0
+	has_hit = false
+	is_in_hitstun = false
+	is_in_blockstun = false
+	is_knocked_down = false
+	knockdown_timer = 0
+	blockstun_timer = 0
+	hitstun_timer = 0
+	pending_pushback = 0.0
+	pushback_dir = 0.0
+	_hide_special_projectile()
+	if in_jump:
+		_set_animation("jump")
+		return
+	_apply_round_end_landing_anim()
+
+func _advance_round_end_landing() -> void:
+	if round_end_landing_anim == "":
+		return
+	if not in_jump:
+		_apply_round_end_landing_anim()
+		return
+	position.y += vel_y
+	vel_y += GRAVITY
+
+	var jump_frame := 0
+	if vel_y >= -2.0 and vel_y <= 2.0:
+		jump_frame = 1
+	if sprite.sprite_frames and sprite.sprite_frames.has_animation("jump") and sprite.sprite_frames.get_frame_count("jump") > jump_frame:
+		sprite.frame = jump_frame
+		anim_frame = jump_frame
+
+	if position.y >= ground_y:
+		position.y = ground_y
+		vel_y = 0.0
+		in_jump = false
+		just_landed = true
+		SoundManager.play_landing()
+		_apply_round_end_landing_anim()
+
+func _apply_round_end_landing_anim() -> void:
+	if round_end_landing_anim == "":
+		return
+	var anim := round_end_landing_anim
+	round_end_landing_anim = ""
+	_set_animation(anim)
+
 ## Called when this player blocks an attack
 func apply_block(blockstun_frames: int, pushback: float) -> void:
 	is_in_blockstun = true
@@ -992,7 +1057,7 @@ func _update_animation() -> void:
 
 	# For AnimatedSprite2D, let it auto-advance.
 	# Sync the frame counter for debug overlay consistency.
-	var looping_anims: Array = ["idle", "walking", "victory_loop"]
+	var looping_anims: Array = ["idle", "walking", "victory_loop", "downed_final", "downed_round"]
 	if not looping_anims.has(current_anim):
 		# Clamp to last frame for one-shot anims
 		if sprite.sprite_frames and sprite.sprite_frames.has_animation(current_anim):
@@ -1003,6 +1068,9 @@ func _update_animation() -> void:
 func _on_animation_finished() -> void:
 	if current_anim == "victory" and sprite.sprite_frames and sprite.sprite_frames.has_animation("victory_loop") and sprite.sprite_frames.get_frame_count("victory_loop") > 0:
 		_set_animation("victory_loop")
+		return
+	if current_anim == "ko" and sprite.sprite_frames and sprite.sprite_frames.has_animation(pending_downed_anim) and sprite.sprite_frames.get_frame_count(pending_downed_anim) > 0:
+		_set_animation(pending_downed_anim)
 		return
 	# One-shot animations end naturally — state handles transitions
 

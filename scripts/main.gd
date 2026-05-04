@@ -20,8 +20,8 @@ var fighter_select_index: int = 0
 var fighter_select_side: int = 0  # 0 = P1, 1 = CPU/P2
 var option_index: int = 0
 var option_difficulty_index: int = 1
-var option_sfx_volume: int = 60
-var option_music_volume: int = 70
+var option_sfx_volume: int = 100
+var option_music_volume: int = 100
 var option_radio_index: int = 0
 const CPU_DIFFICULTIES := ["EASY", "NORMAL", "HARD"]
 const OPTION_COUNT := 4
@@ -705,7 +705,7 @@ func _enter_menu() -> void:
 		p2.control_enabled = false
 		p2.ai_input = {}
 		p2._set_animation("idle")
-	SoundManager.play_music("menu_theme", 0.50)
+	SoundManager.play_music("menu_theme", 4.00)
 	if not boot_intro_seen and boot_overlay:
 		_start_boot_intro()
 	_update_menu_ui()
@@ -715,12 +715,12 @@ func _process_menu_input() -> void:
 		AppState.MENU:
 			if Input.is_action_just_pressed("p1_up"):
 				menu_index = posmod(menu_index - 1, 3)
-				SoundManager.play("menu_cursor", 0.42)
+				SoundManager.play("menu_cursor", 4.00)
 			elif Input.is_action_just_pressed("p1_down"):
 				menu_index = posmod(menu_index + 1, 3)
-				SoundManager.play("menu_cursor", 0.42)
+				SoundManager.play("menu_cursor", 4.00)
 			elif Input.is_action_just_pressed("p1_start"):
-				SoundManager.play("menu_select", 0.50)
+				SoundManager.play("menu_select", 3.00)
 				match menu_index:
 					0:
 						app_state = AppState.FIGHTER_SELECT
@@ -735,18 +735,18 @@ func _process_menu_input() -> void:
 		AppState.FIGHTER_SELECT:
 			if Input.is_action_just_pressed("p1_left") or Input.is_action_just_pressed("p1_right"):
 				fighter_select_side = 1 - fighter_select_side
-				SoundManager.play("menu_cursor", 0.42)
+				SoundManager.play("menu_cursor", 4.00)
 				fighter_select_index = FIGHTER_PLACEHOLDERS.find(selected_p2_fighter_name if fighter_select_side == 1 else selected_p1_fighter_name)
 				if fighter_select_index < 0 or _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
 					fighter_select_index = _first_unlocked_fighter_index()
 			elif Input.is_action_just_pressed("p1_up"):
 				_step_fighter_select(-1)
-				SoundManager.play("menu_cursor", 0.42)
+				SoundManager.play("menu_cursor", 4.00)
 			elif Input.is_action_just_pressed("p1_down"):
 				_step_fighter_select(1)
-				SoundManager.play("menu_cursor", 0.42)
+				SoundManager.play("menu_cursor", 4.00)
 			elif Input.is_action_just_pressed("p1_start"):
-				SoundManager.play("menu_select", 0.50)
+				SoundManager.play("menu_select", 3.00)
 				if _is_fighter_locked(FIGHTER_PLACEHOLDERS[fighter_select_index]):
 					fighter_select_index = _first_unlocked_fighter_index()
 				_set_selected_fighter_for_side(FIGHTER_PLACEHOLDERS[fighter_select_index])
@@ -1255,7 +1255,7 @@ func _start_boot_intro() -> void:
 	boot_intro_active = true
 	boot_intro_seen = true
 	boot_intro_time = 0.0
-	SoundManager.play("menu_open", 0.30)
+	SoundManager.play("menu_open", 4.00)
 	_set_boot_intro_visible(true)
 	_update_boot_intro(0.0)
 
@@ -1296,7 +1296,7 @@ func _update_boot_intro(delta: float) -> void:
 	if boot_intro_time >= BOOT_INTRO_DURATION:
 		boot_intro_active = false
 		_set_boot_intro_visible(false)
-		SoundManager.play("menu_select", 0.38)
+		SoundManager.play("menu_select", 3.00)
 
 func _get_fighter_select_portrait(fighter_name: String) -> Texture2D:
 	match fighter_name:
@@ -1622,15 +1622,25 @@ func _finish_round(winner: int, by_ko: bool) -> void:
 	round_over_timer = 1.8
 	_freeze_players()
 
-	# Put the winner into victory pose before the round transition.
+	# Put the winner into victory pose before the round transition. If the
+	# defeated fighter was KO'd, let their KO one-shot settle into the right
+	# grounded loop: V2 for a non-final round loss, V1 for match elimination.
 	if winner == 1:
 		p1_round_wins += 1
+		var final_elimination := p1_round_wins >= ROUNDS_TO_WIN
 		if p1:
-			p1._set_animation("victory")
+			p1.prepare_round_end_pose("victory")
+		if by_ko and p2:
+			p2.set_downed_loop(final_elimination)
+			p2.prepare_round_end_pose("ko")
 	elif winner == 2:
 		p2_round_wins += 1
+		var final_elimination := p2_round_wins >= ROUNDS_TO_WIN
 		if p2:
-			p2._set_animation("victory")
+			p2.prepare_round_end_pose("victory")
+		if by_ko and p1:
+			p1.set_downed_loop(final_elimination)
+			p1.prepare_round_end_pose("ko")
 
 	_update_round_dots()
 	var round_detail := ""

@@ -26,8 +26,8 @@ for marker in [
 
 for marker in [
     'var option_index: int = 0',
-    'var option_sfx_volume: int = 60',
-    'var option_music_volume: int = 70',
+    'var option_sfx_volume: int = 100',
+    'var option_music_volume: int = 100',
     'var option_radio_index: int = 0',
     'const OPTION_COUNT := 4',
     'SoundManager.set_sfx_volume_percent(option_sfx_volume)',

@@ -27,6 +27,8 @@ static func build_teknium_frames() -> SpriteFrames:
 	var victory_tex := load("res://assets/real/characters/teknium/Teknium_Victory_V1-Sheet.png") as Texture2D
 	var hurt_tex := load("res://assets/real/characters/teknium/Teknium_Hurt_V3-Sheet.png") as Texture2D
 	var ko_tex := load("res://assets/real/characters/teknium/Teknium_KO_V1-Sheet.png") as Texture2D
+	var downed_final_tex := load("res://assets/real/characters/teknium/Teknium_Downed_V1-Sheet.png") as Texture2D
+	var downed_round_tex := load("res://assets/real/characters/teknium/Teknium_Downed_V2-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
 		push_warning("SpriteLoader: Teknium sheets missing, falling back to Prototype")
 		return build_prototype_frames()
@@ -81,6 +83,10 @@ static func build_teknium_frames() -> SpriteFrames:
 		_add_single_frame_anim_from_sheet(frames, "head_hit", idle_tex, 7, 8, 60.0 / 6.0)
 	if ko_tex:
 		_add_sheet_animation(frames, "ko", ko_tex, 8, 60.0 / 6.0, false)
+	if downed_final_tex:
+		_add_sheet_animation(frames, "downed_final", downed_final_tex, 8, 60.0 / 8.0, true)
+	if downed_round_tex:
+		_add_sheet_animation(frames, "downed_round", downed_round_tex, 8, 60.0 / 8.0, true)
 	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 8, 60.0 / 6.0)
 	if crouch_tex:
 		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
@@ -101,6 +107,8 @@ static func build_lobster_frames() -> SpriteFrames:
 	var taunt_tex := load("res://assets/real/characters/lobster/Lobster_Taunt_V1-Sheet.png") as Texture2D
 	var hurt_tex := load("res://assets/real/characters/lobster/Lobster_Hurt_V1-Sheet.png") as Texture2D
 	var ko_tex := load("res://assets/real/characters/lobster/Lobster_KO_V1-Sheet.png") as Texture2D
+	var downed_final_tex := load("res://assets/real/characters/lobster/Lobster_Downed_V1-Sheet.png") as Texture2D
+	var downed_round_tex := load("res://assets/real/characters/lobster/Lobster_Downed_V2-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
 		push_warning("SpriteLoader: Lobster sheets missing, falling back to Teknium")
 		return build_teknium_frames()
@@ -161,6 +169,10 @@ static func build_lobster_frames() -> SpriteFrames:
 		_add_sheet_animation(frames, "ko", ko_tex, 8, 60.0 / 6.0, false)
 	else:
 		_add_single_frame_anim_from_sheet(frames, "ko", idle_tex, 3, 5, 60.0 / 6.0)
+	if downed_final_tex:
+		_add_sheet_animation(frames, "downed_final", downed_final_tex, 8, 60.0 / 8.0, true)
+	if downed_round_tex:
+		_add_sheet_animation(frames, "downed_round", downed_round_tex, 8, 60.0 / 8.0, true)
 	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 5, 60.0 / 6.0)
 	if crouch_tex:
 		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
