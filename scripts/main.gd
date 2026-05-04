@@ -1737,8 +1737,8 @@ func _create_hud() -> void:
 	p2_display_health = p2.MAX_HEALTH if p2 else 1000.0
 
 	announcement_label = Label.new()
-	announcement_label.position = Vector2(92, 92)
-	announcement_label.size = Vector2(328, 96)
+	announcement_label.position = Vector2(92, 54)
+	announcement_label.size = Vector2(328, 70)
 	announcement_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	announcement_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	announcement_label.add_theme_font_size_override("font_size", 17)
@@ -1746,17 +1746,17 @@ func _create_hud() -> void:
 	announcement_label.visible = false
 	_ui_add_child(announcement_label)
 
-	combat_overlay_back = _make_panel(Vector2(100, 92), Vector2(312, 90), Color(0.0, 0.92, 0.82, 0.18), Color(0.0, 0.95, 0.82, 0.54), 2, 11)
+	combat_overlay_back = _make_panel(Vector2(100, 54), Vector2(312, 72), Color(0.0, 0.92, 0.82, 0.18), Color(0.0, 0.95, 0.82, 0.54), 2, 11)
 	combat_overlay_back.visible = false
 	_ui_add_child(combat_overlay_back)
 
-	combat_overlay_panel = _make_panel(Vector2(106, 98), Vector2(300, 78), Color(0.015, 0.035, 0.048, 0.90), Color(0.0, 0.95, 0.82, 0.78), 1, 9)
+	combat_overlay_panel = _make_panel(Vector2(106, 60), Vector2(300, 60), Color(0.015, 0.035, 0.048, 0.90), Color(0.0, 0.95, 0.82, 0.78), 1, 9)
 	combat_overlay_panel.visible = false
 	_ui_add_child(combat_overlay_panel)
 
 	combat_overlay_title_label = Label.new()
-	combat_overlay_title_label.position = Vector2(118, 106)
-	combat_overlay_title_label.size = Vector2(276, 34)
+	combat_overlay_title_label.position = Vector2(118, 64)
+	combat_overlay_title_label.size = Vector2(276, 28)
 	combat_overlay_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	combat_overlay_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	combat_overlay_title_label.add_theme_font_override("font", HUD_FONT)
@@ -1769,8 +1769,8 @@ func _create_hud() -> void:
 	_ui_add_child(combat_overlay_title_label)
 
 	combat_overlay_detail_label = Label.new()
-	combat_overlay_detail_label.position = Vector2(118, 140)
-	combat_overlay_detail_label.size = Vector2(276, 22)
+	combat_overlay_detail_label.position = Vector2(118, 96)
+	combat_overlay_detail_label.size = Vector2(276, 18)
 	combat_overlay_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	combat_overlay_detail_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	combat_overlay_detail_label.add_theme_font_override("font", HUD_FONT)
