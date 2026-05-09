@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-~/bin/godot4 --headless --export-release "Web" export/web/index.html
+GODOT_BIN="${GODOT_BIN:-$HOME/bin/godot4}"
+"$GODOT_BIN" --headless --export-release "Web" export/web/index.html
 python3 - <<'PY'
 from pathlib import Path
 import shutil, json
@@ -138,5 +139,6 @@ bridge_js = f'''
 '''
 text = text.replace('\n\t\tlet started = false;', '\n' + bridge_js + '\n\t\tlet started = false;')
 p.write_text(text)
+(web / '.nojekyll').write_text('')
 print(f'exported_and_patched_godot_triggered_audio_bridge {len(bridge_urls)} files')
 PY
