@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p export/web
 GODOT_BIN="${GODOT_BIN:-$HOME/bin/godot4}"
 "$GODOT_BIN" --headless --export-release "Web" export/web/index.html
 python3 - <<'PY'
