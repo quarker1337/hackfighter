@@ -1,6 +1,6 @@
 # sprite_loader.gd — Build SpriteFrames from PNGs/sheets at runtime
 # Avoids .tres UID issues and keeps animation config in auditable code
-# Supports the legacy Prototype easter egg and real HACKFIGHTER characters.
+# Supports real HACKFIGHTER characters only; no third-party prototype assets.
 
 class_name SpriteLoader
 
@@ -11,7 +11,8 @@ static func build_character_frames(character_name: String) -> SpriteFrames:
 		"lobster":
 			return build_lobster_frames()
 		_:
-			return build_prototype_frames()
+			push_warning("SpriteLoader: unknown character '%s', using Teknium" % character_name)
+			return build_teknium_frames()
 
 static func build_teknium_frames() -> SpriteFrames:
 	var frames := SpriteFrames.new()
@@ -29,9 +30,10 @@ static func build_teknium_frames() -> SpriteFrames:
 	var ko_tex := load("res://assets/real/characters/teknium/Teknium_KO_V1-Sheet.png") as Texture2D
 	var downed_final_tex := load("res://assets/real/characters/teknium/Teknium_Downed_V1-Sheet.png") as Texture2D
 	var downed_round_tex := load("res://assets/real/characters/teknium/Teknium_Downed_V2-Sheet.png") as Texture2D
+	var block_tex := load("res://assets/real/characters/teknium/Teknium_Blocking_V2-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
-		push_warning("SpriteLoader: Teknium sheets missing, falling back to Prototype")
-		return build_prototype_frames()
+		push_warning("SpriteLoader: required Teknium idle/walk sheets missing; returning empty SpriteFrames")
+		return frames
 
 	_add_sheet_animation(frames, "idle", idle_tex, 8, 60.0 / 8.0, true)
 	_add_sheet_animation(frames, "walking", walk_tex, 6, 60.0 / 6.0, true)
@@ -87,11 +89,17 @@ static func build_teknium_frames() -> SpriteFrames:
 		_add_sheet_animation(frames, "downed_final", downed_final_tex, 8, 60.0 / 8.0, true)
 	if downed_round_tex:
 		_add_sheet_animation(frames, "downed_round", downed_round_tex, 8, 60.0 / 8.0, true)
-	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 8, 60.0 / 6.0)
-	if crouch_tex:
-		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+	if block_tex:
+		# 5-frame guard intro. Non-looping: AnimatedSprite2D holds frame 5
+		# naturally while Player remains in the blocking state.
+		_add_sheet_animation(frames, "blocking_stand", block_tex, 5, 60.0 / 4.0, false)
+		_add_sheet_animation(frames, "blocking_crouch", block_tex, 5, 60.0 / 4.0, false)
 	else:
-		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 1, 8, 60.0 / 6.0)
+		_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 8, 60.0 / 6.0)
+		if crouch_tex:
+			_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+		else:
+			_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 1, 8, 60.0 / 6.0)
 	return frames
 
 static func build_lobster_frames() -> SpriteFrames:
@@ -109,6 +117,7 @@ static func build_lobster_frames() -> SpriteFrames:
 	var ko_tex := load("res://assets/real/characters/lobster/Lobster_KO_V1-Sheet.png") as Texture2D
 	var downed_final_tex := load("res://assets/real/characters/lobster/Lobster_Downed_V1-Sheet.png") as Texture2D
 	var downed_round_tex := load("res://assets/real/characters/lobster/Lobster_Downed_V2-Sheet.png") as Texture2D
+	var block_tex := load("res://assets/real/characters/lobster/Lobster_Block_V2-Sheet.png") as Texture2D
 	if not idle_tex or not walk_tex:
 		push_warning("SpriteLoader: Lobster sheets missing, falling back to Teknium")
 		return build_teknium_frames()
@@ -173,11 +182,17 @@ static func build_lobster_frames() -> SpriteFrames:
 		_add_sheet_animation(frames, "downed_final", downed_final_tex, 8, 60.0 / 8.0, true)
 	if downed_round_tex:
 		_add_sheet_animation(frames, "downed_round", downed_round_tex, 8, 60.0 / 8.0, true)
-	_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 5, 60.0 / 6.0)
-	if crouch_tex:
-		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+	if block_tex:
+		# V2 block is authored facing right. Use the same 5-frame guard intro for
+		# stand/crouch block until a separate crouch-block sheet exists; frame 5 holds.
+		_add_sheet_animation(frames, "blocking_stand", block_tex, 5, 60.0 / 4.0, false)
+		_add_sheet_animation(frames, "blocking_crouch", block_tex, 5, 60.0 / 4.0, false)
 	else:
-		_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 2, 5, 60.0 / 6.0)
+		_add_single_frame_anim_from_sheet(frames, "blocking_stand", idle_tex, 0, 5, 60.0 / 6.0)
+		if crouch_tex:
+			_add_single_frame_anim_from_sheet(frames, "blocking_crouch", crouch_tex, 0, 6, 60.0 / 6.0)
+		else:
+			_add_single_frame_anim_from_sheet(frames, "blocking_crouch", idle_tex, 2, 5, 60.0 / 6.0)
 	return frames
 
 static func _add_sheet_animation(frames: SpriteFrames, anim_name: String, sheet: Texture2D, frame_count: int, speed: float, loop: bool) -> void:
@@ -214,60 +229,3 @@ static func _add_sheet_range_animation(frames: SpriteFrames, anim_name: String, 
 		atlas.atlas = sheet
 		atlas.region = Rect2((start_idx + i) * frame_w, 0, frame_w, frame_h)
 		frames.add_frame(anim_name, atlas)
-
-static func build_prototype_frames() -> SpriteFrames:
-	var frames := SpriteFrames.new()
-	
-	# Animation definitions from JS config
-	# Format: [anim_name, sub_dir, frame_files, speed_fps, loop]
-	# speed_fps = 60 / animSpeed (JS frames-per-sprite-frame)
-	var anims: Array = [
-		["idle",           "Idle",          ["Idle1.png","Idle2.png","Idle3.png","Idle4.png"],  60.0/8.0,  true],
-		["walking",        "walking",       ["Walking1.png","Walking2.png","Walking3.png","Walking4.png","Walking5.png"], 60.0/6.0, true],
-		["jump",           "jump",          ["Jump_Simple1.png","Jump_Simple2.png"], 60.0/5.0, false],
-		["crouching",      "crouching",     ["Crouching1.png","Crouching2.png"], 60.0/4.0, false],
-		["lightpunch",     "lightpunch",    ["lightpunch1.png","lightpunch2.png","lightpunch3.png"], 60.0/4.0, false],
-		["heavypunch",     "heavypunch",    ["heavypunch1.png","heavypunch2.png","heavypunch3.png","heavypunch4.png","heavypunch5.png"], 60.0/5.0, false],
-		["lightkick",      "lightkick",     ["Lightkick1.png","Lightkick2.png","Lightkick3.png","Lightkick4.png","Lightkick5.png"], 60.0/4.0, false],
-		["heavykick",      "heavykick",     ["heavykick1.png","heavykick2.png","heavykick3.png","heavykick4.png","heavykick5.png"], 60.0/5.0, false],
-		["victory",        "victory",       ["victory1.png","victory2.png","victory3.png","victory4.png"], 60.0/8.0, false],
-		["abdomen_hit",    "Abdomen_Hit",   ["Abdomen_Hit1.png","Abdomen_Hit2.png","Abdomen_Hit3.png","Abdomen_Hit4.png"], 60.0/6.0, false],
-		["head_hit",       "Headhit",       ["Headhit1.png","Headhit2.png","Headhit3.png"], 60.0/6.0, false],
-		["blocking_stand", "blocking",      ["Blocking_stand.png"], 60.0/6.0, false],
-		["blocking_crouch","blocking",      ["Blocking_crouch.png"], 60.0/6.0, false],
-	]
-	
-	var total_loaded: int = 0
-	var total_failed: int = 0
-	
-	for anim_def in anims:
-		var anim_name: String = anim_def[0]
-		var sub_dir: String = anim_def[1]
-		var file_list: Array = anim_def[2]
-		var speed: float = anim_def[3]
-		var loop: bool = anim_def[4]
-		
-		frames.add_animation(anim_name)
-		frames.set_animation_speed(anim_name, speed)
-		frames.set_animation_loop(anim_name, loop)
-		
-		for file_name in file_list:
-			var path: String = "res://assets/sprites/prototype/" + sub_dir + "/" + file_name
-			var tex := load(path) as Texture2D
-			if tex:
-				frames.add_frame(anim_name, tex)
-				total_loaded += 1
-			else:
-				push_warning("SpriteLoader: FAILED to load %s (load returned null)" % path)
-				total_failed += 1
-	
-	print("SpriteLoader: build_prototype_frames done — %d loaded, %d failed, %d animations" % [total_loaded, total_failed, frames.get_animation_names().size()])
-	print("SpriteLoader: animation names: %s" % str(frames.get_animation_names()))
-	
-	# Check frame counts per animation
-	for anim_name in frames.get_animation_names():
-		var count = frames.get_frame_count(anim_name)
-		if count == 0:
-			print("SpriteLoader: WARNING — animation '%s' has ZERO frames!" % anim_name)
-	
-	return frames

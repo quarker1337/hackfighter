@@ -59,22 +59,49 @@ func get_input(self_player: Player, opponent: Player) -> Dictionary:
 	var backoff_distance := 112.0
 	if needs_projectile_runway:
 		backoff_distance = 315.0
+	# Defense has priority over runway spacing. The previous order returned
+	# demo_runway_retreat before this check, so the CPU walked backward while
+	# getting attacked instead of defending itself.
+	var attack_threat_range := 155.0 if needs_projectile_runway else 135.0
+	var reactive_block_chance := maxf(float(settings["block_chance"]), 0.82) if needs_projectile_runway else float(settings["block_chance"])
+	if opponent.current_attack != "" and dist < attack_threat_range and randf() < reactive_block_chance:
+		current_action = "block"
+		decision_timer = 4
+		return _action_to_input(current_action, self_player, opponent)
+
+	# If runway retreat would push into the stage wall, stop trying to make
+	# impossible space. Cornered CPU should defend or swing back for trailer flow.
+	var opponent_is_to_right := opponent.position.x > self_player.position.x
+	var retreat_blocked_by_wall := (opponent_is_to_right and self_player.position.x <= self_player.stage_left_bound + 18.0) or ((not opponent_is_to_right) and self_player.position.x >= self_player.stage_right_bound - 18.0)
+	if needs_projectile_runway and retreat_blocked_by_wall and dist < backoff_distance:
+		if self_projectile_special_threat:
+			# Cornered with special ready: fire instead of moonwalking into the wall.
+			current_action = "heavyKick"
+		elif dist < 118.0:
+			var corner_roll := randf()
+			if corner_roll < 0.38:
+				current_action = "block"
+			elif corner_roll < 0.66:
+				current_action = "lightPunch"
+			elif corner_roll < 0.84:
+				current_action = "lightKick"
+			else:
+				current_action = "heavyPunch"
+		else:
+			current_action = "walk_forward"
+		decision_timer = 6 + (randi() % 5)
+		return _action_to_input(current_action, self_player, opponent)
+
 	if needs_projectile_runway and dist < backoff_distance:
-		if randf() < 1.0:
-			# Use a separate action so Player can treat this as evasive movement,
-			# not normal "hold back to block" while a projectile special is active.
-			current_action = "demo_runway_retreat"
-			decision_timer = 16 + (randi() % 12)
-			return _action_to_input(current_action, self_player, opponent)
+		# Use a separate action so Player can treat this as evasive movement,
+		# not normal "hold back to block" while a projectile special is active.
+		current_action = "demo_runway_retreat"
+		decision_timer = 16 + (randi() % 12)
+		return _action_to_input(current_action, self_player, opponent)
 	elif self_projectile_special_threat and dist >= backoff_distance:
 		# Once the CPU has charged special and made space, fire from range.
 		current_action = "heavyKick"
 		decision_timer = 6
-		return _action_to_input(current_action, self_player, opponent)
-
-	if opponent.current_attack != "" and dist < 135.0 and randf() < float(settings["block_chance"]):
-		current_action = "block"
-		decision_timer = min(decision_timer, 4)
 		return _action_to_input(current_action, self_player, opponent)
 
 	decision_timer -= 1

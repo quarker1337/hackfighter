@@ -113,8 +113,12 @@ var boot_status_label: Label = null
 var boot_progress_panel: Panel = null
 var boot_progress_fill: ColorRect = null
 var boot_code_labels: Array[Label] = []
-var p1_round_dots: Array[ColorRect] = []
-var p2_round_dots: Array[ColorRect] = []
+var p1_round_frame: NinePatchRect = null
+var p2_round_frame: NinePatchRect = null
+var p1_round_backplate: Polygon2D = null
+var p2_round_backplate: Polygon2D = null
+var p1_round_dots: Array[Polygon2D] = []
+var p2_round_dots: Array[Polygon2D] = []
 
 ## Camera config
 const VIEW_ZOOM := 1.03
@@ -328,11 +332,10 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 	# Pushback direction: defender pushed AWAY from attacker
 	var push_dir: float = 1.0 if defender.position.x > attacker.position.x else -1.0
 
-	# Check if defender is blocking. All mid attacks, including Lobster's trailer
-	# heavy claw, should respect a valid back/block input; otherwise CPU defense
-	# looks broken and the CPU PROFILE setting feels fake.
+	# Check if defender is blocking. Specials are trailer supers/projectiles and
+	# must break through guard; normal attacks still respect valid back/block input.
 	var blocked := false
-	if defender.is_blocking:
+	if defender.is_blocking and attacker.current_attack != "specialAttack":
 		if defender.block_type == "stand" and atk_data.type == "low":
 			blocked = false  # Low attack goes under standing block
 		elif defender.block_type == "crouch" and atk_data.get("type", "mid") == "high":
@@ -384,7 +387,7 @@ func _process_combat(attacker: Player, defender: Player) -> void:
 		else:
 			_trigger_impact_flash(Color(1.0, 1.0, 1.0, 1.0), 0.08)
 		if defender.health <= 0:
-			SoundManager.play_ko()
+			SoundManager.play_ko(defender.character_name)
 
 func _notify_health_damage(defender: Player, amount: int) -> void:
 	var widget := p1_health_widget if defender == p1 else p2_health_widget
@@ -1336,7 +1339,7 @@ func _update_menu_ui() -> void:
 		if node: node.visible = visible and app_state == AppState.FIGHTER_SELECT
 	if not visible:
 		return
-	menu_subtitle_label.text = "ハックファイター"
+	menu_subtitle_label.text = "ハックファイター 2083"
 	menu_body_label.position = Vector2(92, 102)
 	menu_body_label.size = Vector2(328, 106)
 	menu_body_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -1522,10 +1525,15 @@ func _set_game_hud_visible(vis: bool) -> void:
 		impact_flash,
 		p1_health_widget, p2_health_widget,
 		timer_backplate, timer_bg, timer_label,
+		p1_round_backplate, p2_round_backplate,
+		p1_round_frame, p2_round_frame,
 	]
 	for node in nodes:
 		if node:
 			node.visible = vis
+	for pip in p1_round_dots + p2_round_dots:
+		if pip:
+			pip.visible = vis
 
 func _play_profile_round_intro_fade() -> void:
 	if p1_health_widget and p1_health_widget.has_method("play_round_intro_fade"):
@@ -1579,6 +1587,7 @@ func _start_next_round(first_round: bool = false) -> void:
 		ai.reset()
 	_reset_special_ready_hud()
 	_apply_camera_tracking(true)
+	SoundManager.play_random_fight_music_fade_in(0.85, 2.5)
 	_play_profile_round_intro_fade()
 	if announcement_label:
 		announcement_label.visible = false
@@ -1726,6 +1735,67 @@ func _create_hud() -> void:
 	timer_label.add_theme_constant_override("shadow_offset_y", 1)
 	_ui_add_child(timer_label)
 
+	# Round/life holders use the authored transparent Lives_Rounds frame. The
+	# interior is a slanted parallelogram, so fill it with a polygon derived from
+	# the PNG alpha edges instead of a rectangle. Draw order: fill -> frame -> pips.
+	p1_round_backplate = Polygon2D.new()
+	p1_round_backplate.position = Vector2(61, 46)
+	p1_round_backplate.polygon = PackedVector2Array([
+		Vector2(5, 2), Vector2(51, 2), Vector2(46, 13), Vector2(0, 13)
+	])
+	p1_round_backplate.color = Color(0.02, 0.16, 0.16, 0.46)
+	_ui_add_child(p1_round_backplate)
+
+	p1_round_frame = NinePatchRect.new()
+	p1_round_frame.texture = load("res://assets/ui/lives_rounds.png")
+	p1_round_frame.position = Vector2(61, 46)
+	p1_round_frame.size = Vector2(52, 15)
+	p1_round_frame.patch_margin_left = 0
+	p1_round_frame.patch_margin_top = 0
+	p1_round_frame.patch_margin_right = 0
+	p1_round_frame.patch_margin_bottom = 0
+	p1_round_frame.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_ui_add_child(p1_round_frame)
+
+	p2_round_backplate = Polygon2D.new()
+	p2_round_backplate.position = Vector2(399, 46)
+	p2_round_backplate.polygon = PackedVector2Array([
+		Vector2(1, 2), Vector2(47, 2), Vector2(52, 13), Vector2(6, 13)
+	])
+	p2_round_backplate.color = Color(0.02, 0.16, 0.16, 0.46)
+	_ui_add_child(p2_round_backplate)
+
+	p2_round_frame = NinePatchRect.new()
+	p2_round_frame.texture = load("res://assets/ui/lives_rounds_p2.png")
+	p2_round_frame.position = Vector2(399, 46)
+	p2_round_frame.size = Vector2(52, 15)
+	p2_round_frame.patch_margin_left = 0
+	p2_round_frame.patch_margin_top = 0
+	p2_round_frame.patch_margin_right = 0
+	p2_round_frame.patch_margin_bottom = 0
+	p2_round_frame.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	_ui_add_child(p2_round_frame)
+
+	for i in range(ROUNDS_TO_WIN):
+		var p1_pip := Polygon2D.new()
+		p1_pip.position = Vector2(75 + i * 13, 51)
+		p1_pip.polygon = PackedVector2Array([
+			Vector2(1, 0), Vector2(10, 0), Vector2(8, 5), Vector2(0, 5)
+		])
+		p1_pip.color = Color(0.26, 1.25, 1.04, 1.0)
+		_ui_add_child(p1_pip)
+		p1_round_dots.append(p1_pip)
+
+		var p2_pip := Polygon2D.new()
+		p2_pip.position = Vector2(427 - i * 13, 51)
+		p2_pip.polygon = PackedVector2Array([
+			Vector2(0, 0), Vector2(9, 0), Vector2(10, 5), Vector2(2, 5)
+		])
+		p2_pip.color = Color(1.28, 0.31, 0.66, 1.0)
+		_ui_add_child(p2_pip)
+		p2_round_dots.append(p2_pip)
+	_update_round_dots()
+
 	timer_word_label = Label.new()
 	# The replacement frame is already labeled by its shape/details; hide the old
 	# TIME caption so the hollow center stays dedicated to the countdown digits.
@@ -1863,9 +1933,22 @@ func _update_hud() -> void:
 		timer_bg.modulate.a = 1.0
 
 func _update_round_dots() -> void:
-	# Round-win pips were removed from the healthbar area in round 3 because they
-	# read as stray yellow square artifacts beside the portraits.
-	return
+	var p1_lives_left: int = clampi(ROUNDS_TO_WIN - p2_round_wins, 0, ROUNDS_TO_WIN)
+	var p2_lives_left: int = clampi(ROUNDS_TO_WIN - p1_round_wins, 0, ROUNDS_TO_WIN)
+	for i in range(p1_round_dots.size()):
+		var pip := p1_round_dots[i]
+		if not pip:
+			continue
+		var active := i < p1_lives_left
+		pip.color = Color(0.26, 1.25, 1.04, 1.0) if active else Color(0.04, 0.28, 0.30, 0.62)
+		pip.modulate.a = 1.0 if active else 0.62
+	for i in range(p2_round_dots.size()):
+		var pip := p2_round_dots[i]
+		if not pip:
+			continue
+		var active := i < p2_lives_left
+		pip.color = Color(1.28, 0.31, 0.66, 1.0) if active else Color(0.28, 0.05, 0.16, 0.62)
+		pip.modulate.a = 1.0 if active else 0.62
 
 # ── Debug ─────────────────────────────────────────────────────────────
 

@@ -30,7 +30,7 @@ const TEKNIUM_ATTACKS: Dictionary = {
 	"lightPunch":  { "startup": 14, "active": 8,  "recovery": 6,  "damage": 30,  "hitstun": 10, "blockstun": 6,  "pushback": 2, "type": "mid" },
 	"heavyPunch":  { "startup": 3,  "active": 5, "recovery": 13, "damage": 80,  "hitstun": 16, "blockstun": 10, "pushback": 4, "type": "mid" },
 	"lightKick":   { "startup": 2,  "active": 5, "recovery": 6,  "damage": 40,  "hitstun": 12, "blockstun": 7, "pushback": 3, "type": "mid" },
-	# Teknium's asset is a high/roundhouse-style kick, not the old Prototype low sweep.
+	# Teknium's asset is a high/roundhouse-style kick, so this is a mid attack.
 	"heavyKick":   { "startup": 7,  "active": 4, "recovery": 14, "damage": 100, "hitstun": 20, "blockstun": 12, "pushback": 5, "type": "mid", "knockdown": true },
 	# Trailer special: same split format as Lobster. Frames 1-7 cast, frames 8-10
 	# become a moving green projectile with the hitbox centered on it.
@@ -72,7 +72,7 @@ const ANIM_SPEED: Dictionary = {
 }
 
 # ── Hitbox/Hurtbox constants (relative to position = feet center) ──
-# Default keeps the old JS/Prototype prototype box. Production characters override it below.
+# Default prototype box; production characters override it below.
 const HURTBOX := Rect2(-20, -80, 40, 80)
 const CHARACTER_HURTBOX: Dictionary = {
 	"teknium": Rect2(-36, -172, 72, 137),
@@ -547,7 +547,7 @@ func _sync_visual_layers() -> void:
 	# Most Lobster sheets use the default left-authored flip, but a few sheets are
 	# authored opposite relative to that set. Keep gameplay facing semantics intact
 	# and only adjust visual flip per animation.
-	var lobster_authored_right := character_name.to_lower() == "lobster" and current_anim in ["specialattack", "downed_final", "downed_round"]
+	var lobster_authored_right := character_name.to_lower() == "lobster" and current_anim in ["specialattack", "blocking_stand", "blocking_crouch", "downed_final", "downed_round"]
 	if character_name.to_lower() == "lobster":
 		sprite.flip_h = not facing_right if lobster_authored_right else facing_right
 	else:
@@ -590,12 +590,13 @@ func _physics_process(_delta: float) -> void:
 		_save_prev_ai_input()
 		return
 
-	# ── Hitstun: skip all input, just count down ──────────────────────
+	# ── Hitstun: skip input, but keep airborne physics alive ──────────
 	if is_in_hitstun:
 		hitstun_timer -= 1
+		_advance_airborne_physics(true)
 		if hitstun_timer <= 0:
 			is_in_hitstun = false
-			_set_animation("idle")
+			_set_animation("jump" if in_jump else "idle")
 		# Apply pending pushback during hitstun
 		_apply_pushback()
 		_update_shadow()
@@ -604,12 +605,13 @@ func _physics_process(_delta: float) -> void:
 		_save_prev_ai_input()
 		return
 
-	# ── Blockstun: skip all input, just count down ────────────────────
+	# ── Blockstun: skip input, but keep airborne physics alive ────────
 	if is_in_blockstun:
 		blockstun_timer -= 1
+		_advance_airborne_physics(true)
 		if blockstun_timer <= 0:
 			is_in_blockstun = false
-			_set_animation("idle")
+			_set_animation("jump" if in_jump else "idle")
 		_apply_pushback()
 		_update_shadow()
 		_update_debug_overlay()
@@ -617,14 +619,16 @@ func _physics_process(_delta: float) -> void:
 		_save_prev_ai_input()
 		return
 
-	# ── Knockdown: skip all input, count down then get up ─────────────
+	# ── Knockdown: skip input, but let airborne victims fall ──────────
 	if is_knocked_down:
-		knockdown_timer -= 1
-		if knockdown_timer <= 0:
-			# Start getting up phase
-			getting_up_timer = GETTING_UP_FRAMES
-			is_knocked_down = false
-			_set_animation("idle")  # no "getting up" sprite, just go to idle
+		_advance_airborne_physics(true)
+		if not in_jump:
+			knockdown_timer -= 1
+			if knockdown_timer <= 0:
+				# Start getting up phase only after touching the ground.
+				getting_up_timer = GETTING_UP_FRAMES
+				is_knocked_down = false
+				_set_animation("idle")  # no "getting up" sprite, just go to idle
 		_update_shadow()
 		_update_debug_overlay()
 		_sync_visual_layers()
@@ -775,6 +779,26 @@ func _physics_process(_delta: float) -> void:
 	_save_prev_ai_input()
 
 # ── Input helpers ─────────────────────────────────────────────────────
+
+func _advance_airborne_physics(preserve_current_anim: bool = false) -> void:
+	if not in_jump:
+		return
+	position.y += vel_y
+	vel_y += GRAVITY
+	if not preserve_current_anim:
+		# Match JS jump visual: extended while rising/falling, tucked near apex.
+		var jump_frame := 0
+		if vel_y >= -2.0 and vel_y <= 2.0:
+			jump_frame = 1
+		if sprite.sprite_frames and sprite.sprite_frames.has_animation("jump") and sprite.sprite_frames.get_frame_count("jump") > jump_frame:
+			sprite.frame = jump_frame
+			anim_frame = jump_frame
+	if position.y >= ground_y:
+		position.y = ground_y
+		vel_y = 0.0
+		in_jump = false
+		just_landed = true
+		SoundManager.play_landing()
 
 func _can_use_special_attack() -> bool:
 	return sprite and sprite.sprite_frames and sprite.sprite_frames.has_animation("specialattack") and sprite.sprite_frames.get_frame_count("specialattack") > 0
@@ -1020,7 +1044,7 @@ func _start_attack(attack_name: String) -> void:
 	_set_animation(anim_map[attack_name])
 	if attack_name == "specialAttack":
 		consume_special_ready()
-	SoundManager.play_attack_swing(attack_name)
+	SoundManager.play_attack_swing(attack_name, character_name)
 
 # ── Animation (manual frame advance, matching JS) ────────────────────
 

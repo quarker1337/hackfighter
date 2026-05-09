@@ -14,6 +14,8 @@ text = text.replace('"ensureCrossOriginIsolationHeaders":true','"ensureCrossOrig
 # Copy real game audio files next to the web export. These are triggered ONLY
 # from Godot SoundManager via JavaScriptBridge, not from browser key events.
 audio_dir = web / 'audio_bridge'
+if audio_dir.exists():
+    shutil.rmtree(audio_dir)
 audio_dir.mkdir(parents=True, exist_ok=True)
 manifest = {
     'fight': 'assets/audio/announcer/Fight.mp3',
@@ -28,22 +30,33 @@ manifest = {
     'you_win': 'assets/audio/announcer/You_Win.mp3',
     'you_lose': 'assets/audio/announcer/You_Loose.mp3',
     'perfect': 'assets/audio/announcer/Perfect.mp3',
-    'menu_cursor': 'assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_02 - Move Cursor.wav',
-    'menu_select': 'assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_03 - Selection.wav',
-    'menu_open': 'assets/audio/01 Select Screen & World Map/REMOVED_AUDIO_04 - Plane.wav',
-    'light_attack': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_38 - Light Attack.wav',
-    'medium_attack': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_39 - Medium Attack.wav',
-    'hard_attack': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_40 - Hard Attack1.wav',
-    'jab_hit': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_42 - Jab Hit.wav',
-    'fierce_hit': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_44 - Fierce Hit.wav',
-    'short_hit': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_45 - Short Hit.wav',
-    'roundhouse_hit': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_47 - Roundhouse Hit.wav',
-    'blocked': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_51 - Blocked.wav',
-    'hit_ground': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_52 - Hit the ground.wav',
-    'landing': 'assets/audio/04 Moves & Hits/REMOVED_AUDIO_53 - Landing.wav',
-    'grunt1': 'assets/audio/05 Character Voices/REMOVED_AUDIO_63 - Grunt1.wav',
-    'grunt2': 'assets/audio/05 Character Voices/REMOVED_AUDIO_64 - Grunt2.wav',
-    'ko_male': 'assets/audio/05 Character Voices/REMOVED_AUDIO_67 - KO Male.wav',
+    'menu_cursor': 'assets/audio/gameplay/0905/Menu_Open.wav',
+    'menu_select': 'assets/audio/gameplay/0905/Menu_Select.wav',
+    'menu_open': 'assets/audio/gameplay/0905/Menu_Open.wav',
+    'light_attack': 'assets/audio/gameplay/0905/Light_Attack_Whiff.wav',
+    'medium_attack': 'assets/audio/gameplay/0905/Medium_Attack_Whiff.wav',
+    'hard_attack': 'assets/audio/gameplay/0905/Heavy_Attack_Whiff.wav',
+    'special_teknium_1': 'assets/audio/specials/Teknium_Special_Fire_1.mp3',
+    'special_teknium_2': 'assets/audio/specials/Teknium_Special_Fire_2.mp3',
+    'special_lobster_1': 'assets/audio/specials/Lobster_Special_Fire_1.mp3',
+    'special_lobster_2': 'assets/audio/specials/Lobster_Special_Fire_2.mp3',
+    'jab_hit': 'assets/audio/gameplay/0905/Jab_Hit.wav',
+    'fierce_hit': 'assets/audio/gameplay/0905/Fierce_Hit.wav',
+    'short_hit': 'assets/audio/gameplay/0905/Short_Hit.wav',
+    'roundhouse_hit': 'assets/audio/gameplay/0905/Fierce_Hit_2.wav',
+    'blocked': 'assets/audio/gameplay/0905/Blocked.wav',
+    'hit_ground': 'assets/audio/gameplay/0905/Hit_Ground.wav',
+    'landing': 'assets/audio/gameplay/0905/Landing.wav',
+    'grunt1': 'assets/audio/gameplay/0905/Male_Grunt_1.wav',
+    'grunt2': 'assets/audio/gameplay/0905/Male_Grunt_2.wav',
+    'ko_male': 'assets/audio/gameplay/0905/Male_General_Knockout.wav',
+    'ko_lobster': 'assets/audio/gameplay/0905/Lobster_Knockout.wav',
+    'ko_no_idea': 'assets/audio/gameplay/0905/No_Idea_Knockout.wav',
+    'menu_theme': 'assets/audio/music/Hackfighter-Menu-Theme.ogg',
+    'fight_theme_1': 'assets/audio/music/Hackfighter - PartOne.ogg',
+    'fight_theme_2': 'assets/audio/music/Hackfighter - PartTwo.ogg',
+    'fight_theme_3': 'assets/audio/music/Hackfighter - PartThree.ogg',
+    'fight_theme_4': 'assets/audio/music/Hackfighter - PartFour.ogg',
 }
 bridge_urls = {}
 for key, rel in manifest.items():
@@ -70,6 +83,8 @@ bridge_js = f'''
 \t\t\tif (hackfighterGameAudioBridge) return;
 \t\t\tconst bank = {{}};
 \t\t\tconst active = [];
+\t\t\tlet music = null;
+\t\t\tlet musicFadeTimer = null;
 \t\t\tfunction play(name, volume = 1.0) {{
 \t\t\t\tconst url = hackfighterAudioBridgeUrls[name];
 \t\t\t\tif (!url) return false;
@@ -84,9 +99,41 @@ bridge_js = f'''
 \t\t\t\t\treturn true;
 \t\t\t\t}} catch (e) {{ console.warn('Hackfighter audio bridge failed', name, e); return false; }}
 \t\t\t}}
-\t\t\thackfighterGameAudioBridge = {{ play, bank, active, urls: hackfighterAudioBridgeUrls }};
+\t\t\tfunction playMusic(name, volume = 1.0, fadeSeconds = 0.0) {{
+\t\t\t\tconst url = hackfighterAudioBridgeUrls[name];
+\t\t\t\tif (!url) return false;
+\t\t\t\ttry {{
+\t\t\t\t\tstopMusic();
+\t\t\t\t\tmusic = new Audio(url);
+\t\t\t\t\tmusic.dataset.name = name;
+\t\t\t\t\tmusic.loop = true;
+\t\t\t\t\tmusic.preload = 'auto';
+\t\t\t\t\tconst targetVolume = Math.max(0, Math.min(1, volume));
+\t\t\t\t\tconst fadeMs = Math.max(0, fadeSeconds * 1000);
+\t\t\t\t\tmusic.volume = fadeMs > 0 ? 0 : targetVolume;
+\t\t\t\t\tmusic.play().catch(() => {{}});
+\t\t\t\t\tif (fadeMs > 0) {{
+\t\t\t\t\t\tconst startedAt = performance.now();
+\t\t\t\t\t\tmusicFadeTimer = window.setInterval(() => {{
+\t\t\t\t\t\t\tif (!music) return;
+\t\t\t\t\t\t\tconst t = Math.min(1, (performance.now() - startedAt) / fadeMs);
+\t\t\t\t\t\t\tmusic.volume = targetVolume * (1 - Math.pow(1 - t, 2));
+\t\t\t\t\t\t\tif (t >= 1) {{ window.clearInterval(musicFadeTimer); musicFadeTimer = null; }}
+\t\t\t\t\t\t}}, 50);
+\t\t\t\t\t}}
+\t\t\t\t\tbank[name] = (bank[name] || 0) + 1;
+\t\t\t\t\treturn true;
+\t\t\t\t}} catch (e) {{ console.warn('Hackfighter music bridge failed', name, e); return false; }}
+\t\t\t}}
+\t\t\tfunction stopMusic() {{
+\t\t\t\tif (musicFadeTimer) {{ window.clearInterval(musicFadeTimer); musicFadeTimer = null; }}
+\t\t\t\tif (music) {{ music.pause(); music.currentTime = 0; music = null; }}
+\t\t\t}}
+\t\t\thackfighterGameAudioBridge = {{ play, playMusic, stopMusic, bank, active, urls: hackfighterAudioBridgeUrls }};
 \t\t\twindow.hackfighterGameAudioBridge = hackfighterGameAudioBridge;
 \t\t\twindow.hackfighterPlayGameSound = play;
+\t\t\twindow.hackfighterPlayGameMusic = playMusic;
+\t\t\twindow.hackfighterStopGameMusic = stopMusic;
 \t\t}}
 '''
 text = text.replace('\n\t\tlet started = false;', '\n' + bridge_js + '\n\t\tlet started = false;')
