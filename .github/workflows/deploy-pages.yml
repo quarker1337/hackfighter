@@ -122,5 +122,5 @@ jobs:
             echo "GitHub Pages enabled or already present (HTTP $status)."
           else
             echo "Could not enable GitHub Pages automatically (HTTP $status)."
-            exit 1
+            echo "If the public URL is still 404, enable Pages in repository Settings -> Pages -> Deploy from a branch -> gh-pages / root."
           fi
