@@ -1,79 +1,94 @@
-# HACKFIGHTER 2
+# HACKFIGHTER 2083 / ハックファイター 2083
 
-A Godot 4 browser fighting-game prototype with a dark HACKFIGHTER / Teknium / Nous-research shell, real character sprite-sheet support, Web export, menu audio unlock, and browser-playable build tooling.
+A two-player browser brawler built in Godot 4. Pick a fighter, pick a stage, throw hands. The skin is cyberpunk-Nous; the engine underneath is real Godot with sprite sheets, audio, CPU AI, and a working Web export pipeline.
 
-![HACKFIGHTER 2 loading menu](assets/screenshots/loading-menu.png)
+Currently shipping with two fighters — **Teknium** and **Lobster** — and one stage, the HACKFIGHTER city. It's a prototype, but it runs in a browser and the punches connect.
 
-## Video
+📺 Video: <https://www.youtube.com/watch?v=kSgEnp6wBP8>
 
-Watch the linked gameplay / project video here:
+![HACKFIGHTER 2083 main menu](assets/screenshots/loading-menu.png)
 
-https://www.youtube.com/watch?v=kSgEnp6wBP8
+> Heads up: the directory is `stoatfighter2-godot` for legacy reasons. The game is HACKFIGHTER 2.
 
-## Current game state
-
-- Engine: Godot 4.6.x
-- Main scene: `res://scenes/Main.tscn`
-- Native logical resolution: `512x288`
-- Default shell: HACKFIGHTER main menu with Japanese subtitle `ハックファイター 2083`
-- Current real fighters/assets: Teknium and Lobster
-- Current real stage/assets: HACKFIGHTER city stage
-- Export target: Web / HTML5
-- Audio: Godot sound manager plus a browser audio bridge for Web exports, started only after a real click or Enter key press
+---
 
 ## Controls
 
-Menu:
+**Menu**
 
 - Navigate: `W` / `S`
 - Confirm: `Enter`
-- Back from submenus / fighter select: `U` or `J`
-- Fighter select side change: `A` / `D`
+- Back: `U` / `J`
+- Switch side on fighter select: `A` / `D`
 
-In fight:
+**Fight**
 
-- Move left/right: `A` / `D`
+- Move: `A` / `D`
 - Jump: `W`
 - Crouch: `S`
-- Light punch: `U` or `J`
-- Heavy punch: `I` or `K`
-- Light kick: `O` or `L`
-- Heavy kick: `P` or `;`
+- Light / heavy punch: `U`/`J` and `I`/`K`
+- Light / heavy kick: `O`/`L` and `P`/`;`
 
-Debug / development:
+**Debug**
 
-- `F8`: toggle CPU AI
-- `F9`: toggle debug overlay
+- `F8` — toggle CPU AI
+- `F9` — toggle debug overlay
+
+---
+
+## Play it locally
+
+You'll need Godot 4.6.2, the matching Web export templates, and Python 3 to serve. Setup is in [Dev setup](#dev-setup) below.
+
+Once that's in place:
+
+```bash
+make export-web
+python3 -m http.server 8799 --bind 127.0.0.1 --directory export/web
+```
+
+Open <http://127.0.0.1:8799/index.html>, click the HACKFIGHTER audio gate (or press `Enter`), and the menu should come up.
+
+`make export-web` wraps `tools/export_web.sh`, which handles project-specific Web fixes:
+
+- patches `ensureCrossOriginIsolationHeaders` to `false`
+- avoids COOP/COEP iframe breakage
+- copies real audio into `export/web/audio_bridge/`
+- injects the audio unlock bridge
+
+Don't run an ad-hoc `godot --export` — you'll lose those fixes.
+
+---
 
 ## Repository layout
 
 ```text
 .
 ├── assets/
-│   ├── audio/                  # announcer, gameplay SFX, music, specials
-│   ├── real/characters/        # production fighter sprite sheets
-│   ├── real/stages/            # production stage art
-│   ├── screenshots/            # README screenshots
-│   └── ui/                     # UI/HUD art
-├── scenes/                     # Godot scenes
-├── scripts/                    # GDScript gameplay, stage, sprite/audio systems
+│   ├── audio/           # announcer, SFX, music, specials
+│   ├── real/characters/ # production fighter sprite sheets
+│   ├── real/stages/     # production stage art
+│   ├── screenshots/     # README screenshots
+│   └── ui/              # UI / HUD art
+├── scenes/              # Godot scenes (Main.tscn is entry)
+├── scripts/             # gameplay, stages, sprite + audio systems
 ├── tools/
-│   ├── export_web.sh           # canonical Web export command
+│   ├── export_web.sh    # canonical Web export — use this
 │   └── capture_menu_screenshot.js
-├── export_presets.cfg          # Godot Web export preset
-├── Makefile                    # convenience targets
-└── project.godot               # Godot project file
+├── export_presets.cfg   # Godot Web export preset
+├── Makefile             # convenience targets
+└── project.godot
 ```
 
-`export/` is build output and is intentionally ignored by git.
+`export/` is build output and is gitignored — rebuild with `make export-web`.
 
-## Install / setup
+---
 
-These steps assume Linux. Commands are written from the project root unless noted.
+## Dev setup
 
-### 1. Install Godot 4.6.2
+Linux instructions; adjust paths if you're elsewhere.
 
-Download Godot 4.6.2 and make sure the project-local tooling can run it as `~/bin/godot4`:
+### 1. Godot 4.6.2
 
 ```bash
 mkdir -p ~/bin
@@ -82,14 +97,10 @@ curl -L -o godot.zip "https://github.com/godotengine/godot/releases/download/4.6
 unzip -o godot.zip
 install -m 700 Godot_v4.6.2-stable_linux.x86_64 ~/bin/godot4-4.6.2
 ln -sfn ~/bin/godot4-4.6.2 ~/bin/godot4
-~/bin/godot4 --version
+~/bin/godot4 --version   # → 4.6.2.stable
 ```
 
-Expected version family: `4.6.2.stable`.
-
-Important: use the same Godot version as the export templates. A mismatched binary/templates pair can create a WebAssembly build that loads the splash screen but fails at runtime.
-
-### 2. Install Godot Web export templates
+### 2. Web export templates (matching version)
 
 ```bash
 mkdir -p ~/.local/share/godot/export_templates/4.6.2.stable
@@ -102,118 +113,68 @@ out = Path.home() / ".local/share/godot/export_templates/4.6.2.stable"
 with zipfile.ZipFile("godot_web_templates.tpz", "r") as z:
     z.extractall(out)
 PY
-mv ~/.local/share/godot/export_templates/4.6.2.stable/templates/* ~/.local/share/godot/export_templates/4.6.2.stable/
+mv ~/.local/share/godot/export_templates/4.6.2.stable/templates/* \
+   ~/.local/share/godot/export_templates/4.6.2.stable/
 rmdir ~/.local/share/godot/export_templates/4.6.2.stable/templates
 ```
 
-The `mv` step matters: the template archive extracts into a nested `templates/` directory, but Godot expects the files directly under `4.6.2.stable/`.
+The flatten step matters: the archive nests files under `templates/` but Godot expects them directly under `4.6.2.stable/`.
 
-### 3. Clone / enter the project
-
-```bash
-git clone <repo-url>
-cd stoatfighter2-godot
-```
-
-If you already have this working tree, just enter it:
-
-```bash
-cd ~/hackfighter2-clean/stoatfighter2-godot
-```
-
-### 4. Optional: install Node dependencies for screenshot automation
-
-The game itself does not require Node. The README screenshot helper uses Puppeteer.
-
-If `require('puppeteer')` already works, you can skip this. Otherwise install it in your normal development environment:
-
-```bash
-npm install puppeteer
-```
-
-## Running in the Godot editor
-
-From the project root:
+### 3. Open in editor
 
 ```bash
 ~/bin/godot4 --path .
 ```
 
-Or open this folder from the Godot Project Manager.
+Or open this folder from the Godot project manager.
 
-## Building the Web export
+### 4. (Optional) Screenshot tooling
 
-Use the project-local export entrypoint, not an ad-hoc Godot command:
-
-```bash
-make export-web
-```
-
-This runs:
+The README screenshot is generated by Puppeteer. Skip unless you're regenerating it.
 
 ```bash
-./tools/export_web.sh
+npm install puppeteer
+# with the local server running on port 8799:
+node tools/capture_menu_screenshot.js \
+  assets/screenshots/loading-menu.png \
+  http://127.0.0.1:8799/index.html
 ```
 
-The script exports to:
+---
 
-```text
-export/web/index.html
-```
+## Gotchas
 
-It also performs project-specific Web-export fixes:
+**Binary / template version mismatch.** A 4.6.2 editor with 4.6.1 templates (or vice versa) will produce a Web build that loads the splash and then dies at runtime. Keep them locked together.
 
-- patches `ensureCrossOriginIsolationHeaders` to `false`
-- avoids COOP/COEP iframe breakage
-- copies real audio files into `export/web/audio_bridge/`
-- injects the browser audio unlock / bridge used by the Web build
+**LAN testing over plain HTTP.** Localhost is fine for browser secure-context checks. `http://<lan-ip>` from another machine often isn't — use HTTPS or an SSH tunnel.
 
-## Serving the Web export locally
+**Don't add COOP/COEP headers** if you're embedding the build in an iframe. The project is configured for Web without SharedArrayBuffer / thread isolation, and adding those headers breaks embedding.
 
-After `make export-web`, serve the build from `export/web`:
+**Audio won't play before user interaction.** That's the whole point of the audio gate on the title screen. Browsers require a real click or keypress before any audio context can start.
 
-```bash
-python3 -m http.server 8799 --bind 127.0.0.1 --directory export/web
-```
+**Re-export before testing visible changes.** The headless/editor view doesn't always match what the WASM build does. If a change matters, verify it in the browser build.
 
-Then open:
+---
 
-```text
-http://127.0.0.1:8799/index.html
-```
+## Project facts
 
-Click the HACKFIGHTER audio gate or press `Enter`, then the main menu should appear.
+- Engine: Godot 4.6.2
+- Native logical resolution: 512×288
+- Main scene: `res://scenes/Main.tscn`
+- Export target: Web / HTML5
+- Audio: Godot-native plus a small browser bridge for Web exports
 
-Note for local/LAN testing: localhost HTTP is acceptable for browser secure-context requirements. If you serve to another machine over a LAN IP, use HTTPS or an SSH tunnel; plain `http://<lan-ip>` can fail Godot Web secure-context checks.
+---
 
-## Capturing the README menu screenshot
+## License
 
-With the local server running on port `8799`:
+This repository uses split licensing:
 
-```bash
-node tools/capture_menu_screenshot.js assets/screenshots/loading-menu.png http://127.0.0.1:8799/index.html
-```
+- Code, scripts, project config, tooling, and documentation are licensed under the MIT License. See [LICENSE](LICENSE).
+- Sprites, music, SFX, stage art, UI art, screenshots, and other non-code creative assets are licensed separately. See [ASSET_LICENSE.md](ASSET_LICENSE.md).
 
-The script opens the Web build in Puppeteer, clicks the initial audio gate, waits for the HACKFIGHTER menu, and writes the screenshot used by this README.
+Per-asset notices, if present, override the general asset license.
 
-## Development notes
+---
 
-- Keep source art and scripts in git.
-- Do not commit `export/`; rebuild it with `make export-web`.
-- Keep Web export fixes inside `tools/export_web.sh` so future builds do not drift.
-- For iframe embedding, do not add COOP/COEP headers. The project is configured for Web builds without SharedArrayBuffer/thread isolation.
-- When changing visible game behavior, rebuild with `make export-web` and verify in the browser build, not only in headless/editor diagnostics.
-
-## Backup
-
-A tarball backup of the current working tree can be made from the parent folder with:
-
-```bash
-tar --exclude='.git' --exclude='export' -czf ~/hackfighter/backup_09052026.tar.gz -C ~/hackfighter2-clean stoatfighter2-godot
-```
-
-If you need a complete git-aware archive of the tracked source only, run this from the project root:
-
-```bash
-git archive --format=tar.gz -o ~/hackfighter/backup_09052026.tar.gz HEAD
-```
+It's the year 2083. You are Teknium. Your opponent is a Lobster. The city is on fire.
