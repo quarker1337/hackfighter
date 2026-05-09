@@ -169,7 +169,7 @@ A useful README should include:
 For public game repositories, use split licensing unless the project owner specifies otherwise:
 
 - `LICENSE`: code, scripts, project config, build tooling, documentation. MIT is a common permissive default.
-- `ASSET_LICENSE.md`: non-code creative assets such as sprites, stages, UI art, screenshots, music, and SFX. For original assets that should not be commercially reused, a common default is CC BY-NC-SA 4.0.
+- `ASSET_LICENSE.md`: non-code creative assets such as sprites, stages, UI art, screenshots, music, and SFX. For permissive asset reuse with attribution, a common default is CC BY 4.0; choose a stricter license only if the project owner wants to restrict commercial reuse or derivatives.
 
 Before adding licenses:
 

@@ -2,11 +2,11 @@
 
 Unless a more specific notice is provided next to an individual asset, the non-code creative assets in this repository are licensed under:
 
-Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
-CC BY-NC-SA 4.0
+Creative Commons Attribution 4.0 International
+CC BY 4.0
 
 License text:
-https://creativecommons.org/licenses/by-nc-sa/4.0/
+https://creativecommons.org/licenses/by/4.0/
 
 ## Covered assets
 
@@ -22,19 +22,20 @@ This asset license applies to non-code creative/game content, including but not 
 
 ## What this means
 
-You may share and adapt the covered assets if you:
+You may share and adapt the covered assets, including for commercial purposes, if you:
 
 1. give appropriate credit;
-2. do not use them for commercial purposes;
-3. distribute adaptations under the same license; and
-4. do not apply legal or technical restrictions that prevent others from doing the same.
+2. provide a link to the license; and
+3. indicate if changes were made.
+
+You may not apply legal or technical restrictions that prevent others from exercising the rights granted by the license.
 
 ## Attribution
 
 Suggested attribution:
 
 ```text
-HACKFIGHTER 2 creative assets by quarker1337 and HACKFIGHTER contributors, licensed under CC BY-NC-SA 4.0.
+HACKFIGHTER 2 creative assets by quarker1337 and HACKFIGHTER contributors, licensed under CC BY 4.0.
 ```
 
 ## Code is licensed separately
