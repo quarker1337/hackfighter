@@ -4,6 +4,8 @@ A two-player browser brawler built in Godot 4. Pick a fighter, pick a stage, thr
 
 Currently shipping with two fighters — **Teknium** and **Lobster** — and one stage, the HACKFIGHTER city. It's a prototype, but it runs in a browser and the punches connect.
 
+▶️ Play in browser: <https://quarker1337.github.io/hackfighter/>
+
 📺 Video: <https://www.youtube.com/watch?v=kSgEnp6wBP8>
 
 ![HACKFIGHTER 2083 main menu](assets/screenshots/loading-menu.png)
