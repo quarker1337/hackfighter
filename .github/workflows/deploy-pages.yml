@@ -1,0 +1,108 @@
+name: Deploy Godot Web export to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  GODOT_VERSION: 4.6.2
+  GODOT_RELEASE: 4.6.2-stable
+  GODOT_TEMPLATES_DIR: 4.6.2.stable
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip
+
+      - name: Cache Godot export templates
+        id: cache-templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/${{ env.GODOT_TEMPLATES_DIR }}
+          key: godot-export-templates-${{ runner.os }}-${{ env.GODOT_RELEASE }}
+
+      - name: Install Godot
+        run: |
+          set -euo pipefail
+          curl -L -o /tmp/godot.zip "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_linux.x86_64.zip"
+          unzip -o /tmp/godot.zip -d /tmp/godot
+          install -m 755 "/tmp/godot/Godot_v${GODOT_RELEASE}_linux.x86_64" /tmp/godot4
+          /tmp/godot4 --version
+
+      - name: Install Godot Web export templates
+        if: steps.cache-templates.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATES_DIR}"
+          curl -L -o /tmp/godot_export_templates.tpz "https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          python3 - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+          out = Path.home() / ".local/share/godot/export_templates" / os.environ["GODOT_TEMPLATES_DIR"]
+          with zipfile.ZipFile("/tmp/godot_export_templates.tpz", "r") as z:
+              z.extractall(out)
+          nested = out / "templates"
+          if nested.exists():
+              for child in nested.iterdir():
+                  child.rename(out / child.name)
+              nested.rmdir()
+          PY
+
+      - name: Export Web build
+        env:
+          GODOT_BIN: /tmp/godot4
+        run: |
+          set -euo pipefail
+          ./tools/export_web.sh
+
+      - name: Validate Web export
+        run: |
+          set -euo pipefail
+          test -f export/web/index.html
+          test -f export/web/index.wasm
+          test -f export/web/index.pck
+          test -f export/web/index.js
+          test -f export/web/.nojekyll
+          test -d export/web/audio_bridge
+          grep -q '"ensureCrossOriginIsolationHeaders":false' export/web/index.html
+          grep -q 'CLICK / PRESS ENTER TO ENABLE AUDIO' export/web/index.html
+          grep -q 'hackfighterGameAudioBridge' export/web/index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: export/web
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
