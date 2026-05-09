@@ -204,6 +204,15 @@ The script opens the Web build in Puppeteer, clicks the initial audio gate, wait
 - For iframe embedding, do not add COOP/COEP headers. The project is configured for Web builds without SharedArrayBuffer/thread isolation.
 - When changing visible game behavior, rebuild with `make export-web` and verify in the browser build, not only in headless/editor diagnostics.
 
+## License
+
+This repository uses split licensing:
+
+- Source code, scripts, project configuration, build tooling, and documentation: MIT License. See `LICENSE`.
+- Non-code creative assets such as sprites, stage art, UI art, screenshots, music, and SFX: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International. See `ASSET_LICENSE.md`.
+
+Per-asset notices, if present, override the general asset license.
+
 ## Backup
 
 A tarball backup of the current working tree can be made from the parent folder with:
